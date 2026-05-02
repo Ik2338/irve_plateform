@@ -1,0 +1,231 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [postgis, uuidOssp(map: "uuid-ossp")]
+}
+
+// ─── Énumérations ─────────────────────────────────────────────────────────────
+
+enum UserRole {
+  CLIENT
+  INSTALLER
+  ADMIN
+}
+
+enum RequestStatus {
+  DRAFT
+  SUBMITTED
+  MATCHED
+  QUOTE_SENT
+  QUOTE_ACCEPTED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum ProjectType {
+  RESIDENTIAL
+  COMMERCIAL
+  COPROPRIETE
+  HOTEL      
+  SYNDIC     
+}
+enum PowerLevel {
+  P1  // 3.7 kW
+  P2  // 7.4 kW
+  P3  // 11 kW
+  P4  // 22 kW
+  P5  // >22 kW
+}
+
+enum CertificationLevel {
+  IRVE_P1
+  IRVE_P2
+  IRVE_P3
+}
+
+enum QuoteStatus {
+  PENDING
+  SENT
+  ACCEPTED
+  REFUSED
+  EXPIRED
+}
+
+// ─── Utilisateurs ─────────────────────────────────────────────────────────────
+
+model User {
+  id            String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  email         String    @unique
+  password      String
+  firstName     String
+  lastName      String
+  phone         String?
+  role          UserRole  @default(CLIENT)
+  emailVerified Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  installer     Installer?
+  requests      InstallationRequest[]
+  sentQuotes    Quote[]    @relation("InstallerQuotes")
+
+  @@map("users")
+}
+
+// ─── Installateurs IRVE ───────────────────────────────────────────────────────
+
+model Installer {
+  id                    String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId                String    @unique @db.Uuid
+  companyName           String
+  siret                 String    @unique
+  description           String?
+  website               String?
+  logoUrl               String?
+  address               String?   // ← optionnel (pas renseigné à l'inscription)
+  city                  String    @default("")
+  postalCode            String    @default("")
+  location              Unsupported("geography(Point,4326)")?
+  interventionRadius    Int       @default(30)
+  isVerified            Boolean   @default(false)
+  isActive              Boolean   @default(true)
+  averageRating         Float?
+  totalReviews          Int       @default(0)
+
+  // ── Qualifelec ──────────────────────────────
+  qualifelecCertNumber  String?
+  qualifelecIndices     String[]  @default([])
+  qualifelecExpiresAt   DateTime?
+
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  certifications        InstallerCertification[]
+  projectTypes          InstallerProjectType[]
+  quotes                Quote[]
+  reviews               Review[]
+
+  @@map("installers")
+}  // Relations
+  
+
+model InstallerCertification {
+  id              String             @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  installerId     String             @db.Uuid
+  level           CertificationLevel
+  certNumber      String
+  issuedAt        DateTime
+  expiresAt       DateTime
+  documentUrl     String?
+  isVerified      Boolean            @default(false)
+
+  installer       Installer          @relation(fields: [installerId], references: [id], onDelete: Cascade)
+
+  @@unique([installerId, level])
+  @@map("installer_certifications")
+}
+
+model InstallerProjectType {
+  id          String      @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  installerId String      @db.Uuid
+  projectType ProjectType
+
+  installer   Installer   @relation(fields: [installerId], references: [id], onDelete: Cascade)
+
+  @@unique([installerId, projectType])
+  @@map("installer_project_types")
+}
+
+// ─── Demandes d'installation ──────────────────────────────────────────────────
+
+model InstallationRequest {
+  id               String        @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId           String        @db.Uuid
+  projectType      ProjectType
+  powerLevel       PowerLevel
+  quantity         Int           @default(1)
+  address          String
+  city             String
+  postalCode       String
+  location         Unsupported("geography(Point,4326)")?
+  description      String?
+  hasExistingPanel Boolean       @default(false)
+  urgency          String?
+  status           RequestStatus @default(DRAFT)
+  connectors       String[]      @default([])
+  parkingType      String?
+  parkingAccess    String?
+  parkingSpots     Int?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  // Relations
+  user             User                  @relation(fields: [userId], references: [id])
+  quotes           Quote[]
+  matches          RequestMatch[]
+
+  @@map("installation_requests")
+}
+// ─── Matching installateur / demande ─────────────────────────────────────────
+
+model RequestMatch {
+  id          String              @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  requestId   String              @db.Uuid
+  installerId String              @db.Uuid
+  distance    Float               // distance en km
+  score       Float               // score de matching 0-100
+  notifiedAt  DateTime?
+  createdAt   DateTime            @default(now())
+
+  request     InstallationRequest @relation(fields: [requestId], references: [id])
+
+  @@map("request_matches")
+}
+
+// ─── Devis ────────────────────────────────────────────────────────────────────
+
+model Quote {
+  id            String              @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  requestId     String              @db.Uuid
+  installerId   String              @db.Uuid
+  userId        String              @db.Uuid
+  amount        Float
+  vatRate       Float               @default(20)
+  laborCost     Float
+  materialCost  Float
+  notes         String?
+  validUntil    DateTime
+  pdfUrl        String?
+  status        QuoteStatus         @default(PENDING)
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+
+  // Relations
+  request       InstallationRequest @relation(fields: [requestId], references: [id])
+  installer     Installer           @relation(fields: [installerId], references: [id])
+  sentBy        User                @relation("InstallerQuotes", fields: [userId], references: [id])
+
+  @@map("quotes")
+}
+
+// ─── Avis clients ─────────────────────────────────────────────────────────────
+
+model Review {
+  id          String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  installerId String    @db.Uuid
+  rating      Int       // 1-5
+  comment     String?
+  createdAt   DateTime  @default(now())
+
+  installer   Installer @relation(fields: [installerId], references: [id])
+
+  @@map("reviews")
+}
