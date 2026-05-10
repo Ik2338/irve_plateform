@@ -1,4 +1,4 @@
-import { IsString, IsEnum, IsOptional, IsBoolean, IsInt, IsArray, Min } from 'class-validator';
+import { IsString, IsEnum, IsOptional, IsBoolean, IsInt, IsArray, Min, Matches } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { ProjectType, PowerLevel } from '@prisma/client';
 
@@ -12,13 +12,19 @@ export class CreateRequestDto {
   @ApiProperty({ default: 1 })          @IsOptional() @IsInt() @Min(1) quantity?: number;
   @ApiProperty()                        @IsString()            address: string;
   @ApiProperty()                        @IsString()            city: string;
-  @ApiProperty()                        @IsString()            postalCode: string;
+
+  // ✅ Validation code postal français uniquement (01000 → 98999 + DOM-TOM 97xxx/98xxx)
+  @ApiProperty({ example: '75001' })
+  @Matches(/^(0[1-9]|[1-8]\d|9[0-8])\d{3}$/, {
+    message: 'postalCode doit être un code postal français valide (ex: 75001)',
+  })
+  postalCode: string;
+
   @ApiProperty({ required: false })     @IsOptional() @IsString()  description?: string;
   @ApiProperty({ required: false })     @IsOptional() @IsBoolean() hasExistingPanel?: boolean;
   @ApiProperty({ required: false })     @IsOptional() @IsString()  urgency?: string;
   @ApiProperty({ required: false })     @IsOptional() @IsString()  targetInstallerId?: string;
 
-  // ✅ New fields
   @ApiProperty({ enum: ConnectorType, isArray: true, required: false })
   @IsOptional() @IsArray() @IsEnum(ConnectorType, { each: true })
   connectors?: ConnectorType[];

@@ -1,7 +1,5 @@
 import axios from 'axios';
 
-// ⚠️  En prod/Docker, le frontend passe par nginx qui préfixe /api → backend.
-//     En dev local, on peut setter NEXT_PUBLIC_API_URL=http://localhost:3001
 const API_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
 
 export const api = axios.create({
@@ -22,8 +20,12 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (r) => r,
   (err) => {
-    const isLoginRoute = err.config?.url?.includes('/auth/login');
-    if (err.response?.status === 401 && !isLoginRoute && typeof window !== 'undefined') {
+    const isAuthRoute = err.config?.url?.includes('/auth/login') ||
+                        err.config?.url?.includes('/auth/verify-email') ||
+                        err.config?.url?.includes('/auth/resend-verification') ||
+                        err.config?.url?.includes('/auth/forgot-password') ||
+                        err.config?.url?.includes('/auth/reset-password');
+    if (err.response?.status === 401 && !isAuthRoute && typeof window !== 'undefined') {
       localStorage.removeItem('irve_token');
       localStorage.removeItem('irve_user');
       window.location.href = '/auth/login';
@@ -34,9 +36,13 @@ api.interceptors.response.use(
 
 // ─── Auth ────────────────────────────────
 export const authApi = {
-  register: (data: any) => api.post('/auth/register', data),
-  login:    (data: any) => api.post('/auth/login', data),
-  me:       ()          => api.get('/auth/me'),
+  register:            (data: any)     => api.post('/auth/register', data),
+  login:               (data: any)     => api.post('/auth/login', data),
+  me:                  ()              => api.get('/auth/me'),
+  verifyEmail:         (token: string) => api.get(`/auth/verify-email?token=${encodeURIComponent(token)}`),
+  resendVerification:  (email: string) => api.post('/auth/resend-verification', { email }),
+  forgotPassword:      (email: string) => api.post('/auth/forgot-password', { email }),
+  resetPassword:       (token: string, password: string) => api.post('/auth/reset-password', { token, password }),
 };
 
 // ─── Demandes ────────────────────────────
@@ -44,6 +50,7 @@ export const requestsApi = {
   create: (data: any)  => api.post('/requests', data),
   list:   ()           => api.get('/requests'),
   get:    (id: string) => api.get(`/requests/${id}`),
+  remove: (id: string) => api.delete(`/requests/${id}`), // ← ajout
 };
 
 // ─── Installateurs ───────────────────────

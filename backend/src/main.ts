@@ -5,11 +5,10 @@ import { AppModule } from './app.module';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-  
 
   // CORS
   app.enableCors({
-    origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+    origin: process.env.FRONTEND_URL || 'http://localhost',
     credentials: true,
   });
 
@@ -21,14 +20,14 @@ async function bootstrap() {
     }),
   );
 
-  // Swagger API docs
+  // Swagger
   const config = new DocumentBuilder()
     .setTitle('IRVE Platform API')
     .setDescription('API de mise en relation installateurs IRVE / clients')
     .setVersion('1.0')
     .addBearerAuth()
     .addTag('auth', 'Authentification')
-    .addTag('requests', 'Demandes d\'installation')
+    .addTag('requests', "Demandes d'installation")
     .addTag('installers', 'Installateurs IRVE')
     .addTag('quotes', 'Devis')
     .addTag('matching', 'Matching géographique')
@@ -37,13 +36,18 @@ async function bootstrap() {
 
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('docs', app, document);
-  // Dans main.ts, avant app.listen()
-  
+
+  // Fix BigInt JSON
   (BigInt.prototype as any).toJSON = function () {
-  return Number(this);
-};
-  await app.listen(process.env.PORT || 3001);
-  console.log(`\n🔌 IRVE API running on http://localhost:${process.env.PORT || 3001}`);
-  console.log(`📖 Swagger docs: http://localhost:${process.env.PORT || 3001}/docs\n`);
+    return Number(this);
+  };
+
+  const port = Number(process.env.PORT) || 3001;
+
+  await app.listen(port, '0.0.0.0');
+
+  console.log(`🔌 IRVE API running on port ${port}`);
+  console.log(`📖 Swagger docs available at /docs`);
 }
+
 bootstrap();

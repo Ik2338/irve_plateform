@@ -30,12 +30,18 @@ export default function UserProfilePage() {
     if (!stored) { router.push('/auth/login'); return; }
     const parsed = JSON.parse(stored);
     setUser(parsed);
-    setForm({ firstName: parsed.firstName, lastName: parsed.lastName, phone: parsed.phone || '' });
-    // Fetch fresh data from API
+setForm({ 
+  firstName: parsed.firstName ?? '', 
+  lastName: parsed.lastName ?? '', 
+  phone: parsed.phone ?? '' 
+});    // Fetch fresh data from API
     authApi.me().then(({ data }) => {
       setUser(data);
-      setForm({ firstName: data.firstName, lastName: data.lastName, phone: data.phone || '' });
-    }).catch(() => {}).finally(() => setLoading(false));
+setForm({ 
+  firstName: data.firstName ?? '', 
+  lastName: data.lastName ?? '', 
+  phone: data.phone ?? '' 
+});    }).catch(() => {}).finally(() => setLoading(false));
   }, []);
 
   const saveProfile = async () => {

@@ -1,4 +1,3 @@
-# Utilise node:20-slim (Debian) au lieu d'Alpine — compatible Prisma sans config OpenSSL
 FROM node:20-slim AS base
 WORKDIR /app
 RUN apt-get update -y && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
@@ -8,6 +7,7 @@ COPY package*.json ./
 RUN npm install
 COPY . .
 RUN npx prisma generate
+RUN npm run build
 EXPOSE 3001
 CMD ["sh", "-c", "npx prisma migrate deploy && npx prisma db seed && npm run start:dev"]
 

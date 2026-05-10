@@ -6,13 +6,21 @@ import axios from 'axios';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+// Coordonnées par défaut (Paris) utilisées si le géocodage échoue
+const DEFAULT_COORDS = { lat: 48.8566, lon: 2.3522 };
+
 @Injectable()
 export class InstallersService {
   constructor(private prisma: PrismaService) {}
 
   // ─── Créer OU mettre à jour (upsert) ──────────────────────────────────────
   async create(userId: string, dto: any) {
-    const coords = await this.geocodeAddress(dto);
+    let coords = DEFAULT_COORDS;
+    try {
+      coords = await this.geocodeAddress(dto);
+    } catch (e) {
+      console.warn('[create] Géocodage ignoré, coordonnées par défaut utilisées:', (e as any).message);
+    }
 
     await this.prisma.$executeRaw`
       INSERT INTO "installers" (
@@ -43,7 +51,7 @@ export class InstallersService {
     const installer = await this.prisma.installer.findUnique({ where: { userId } });
     if (!installer) throw new NotFoundException('Profil introuvable après upsert');
 
-    // ─── Project types ────────────────────────────────────────────────────────
+    // ─── Project types ─────────────────────────────────────────────────────
     if (dto.projectTypes && Array.isArray(dto.projectTypes)) {
       await this.prisma.installerProjectType.deleteMany({
         where: { installerId: installer.id },
@@ -59,24 +67,24 @@ export class InstallersService {
       }
     }
 
-    // ─── Certifications ───────────────────────────────────────────────────────
+    // ─── Certifications ────────────────────────────────────────────────────
     if (dto.certifications && Array.isArray(dto.certifications)) {
       await this.prisma.installerCertification.deleteMany({
         where: { installerId: installer.id },
       });
       const validCerts = dto.certifications.filter(
-        (c: any) => c.level && c.certNumber && c.expiresAt
+        (c: any) => c.level && c.certNumber && c.expiresAt,
       );
       if (validCerts.length > 0) {
         await this.prisma.installerCertification.createMany({
           data: validCerts.map((c: any) => ({
-            installerId: installer.id,
-            level: c.level,
-            certNumber: c.certNumber,
-            issuedAt: new Date(),
-            expiresAt: new Date(c.expiresAt),
-            documentUrl: c.documentUrl || null,
-            isVerified: false,
+            installerId:  installer.id,
+            level:        c.level,
+            certNumber:   c.certNumber,
+            issuedAt:     new Date(),
+            expiresAt:    new Date(c.expiresAt),
+            documentUrl:  c.documentUrl || null,
+            isVerified:   false,
           })),
           skipDuplicates: true,
         });
@@ -89,54 +97,64 @@ export class InstallersService {
     });
   }
 
-  // ─── PATCH /installers/profile (alias de create avec upsert) ─────────────
+  // ─── PATCH /installers/profile ────────────────────────────────────────────
   async update(userId: string, dto: any) {
-  const installer = await this.prisma.installer.findUnique({ where: { userId } });
-  if (!installer) throw new NotFoundException('Profil introuvable');
+    const installer = await this.prisma.installer.findUnique({ where: { userId } });
+    if (!installer) throw new NotFoundException('Profil introuvable');
 
-  // Géocodage — seulement si ville OU code postal fourni, jamais bloquant
-  const hasLocation = dto.city || dto.postalCode || dto.address;
-  if (hasLocation) {
-    try {
-      const coords = await this.geocodeAddress({
-        address: dto.address   || installer.address   || '',
-        postalCode: dto.postalCode || installer.postalCode || '',
-        city: dto.city         || installer.city       || '',
-      });
-      await this.prisma.$executeRaw`
-        UPDATE installers
-        SET location = ST_SetSRID(ST_MakePoint(${coords.lon}, ${coords.lat}), 4326)::geography
-        WHERE "userId" = ${userId}::uuid
-      `;
-    } catch (e) {
-      console.warn('[update] Géocodage ignoré :', (e as any).message);
-      // On continue — la mise à jour des autres champs se fait quand même
+    const hasLocation = dto.city || dto.postalCode || dto.address;
+    if (hasLocation) {
+      try {
+        const coords = await this.geocodeAddress({
+          address:    dto.address    || installer.address    || '',
+          postalCode: dto.postalCode || installer.postalCode || '',
+          city:       dto.city       || installer.city       || '',
+        });
+        await this.prisma.$executeRaw`
+          UPDATE installers
+          SET location = ST_SetSRID(ST_MakePoint(${coords.lon}, ${coords.lat}), 4326)::geography
+          WHERE "userId" = ${userId}::uuid
+        `;
+      } catch (e) {
+        console.warn('[update] Géocodage ignoré :', (e as any).message);
+      }
     }
+
+    if (dto.phone !== undefined) {
+      await this.prisma.user.update({
+        where: { id: userId },
+        data: { phone: dto.phone },
+      });
+    }
+
+    await this.prisma.installer.update({
+      where: { userId },
+      data: {
+        ...(dto.companyName        !== undefined && { companyName:        dto.companyName }),
+        ...(dto.description        !== undefined && { description:        dto.description }),
+        ...(dto.address            !== undefined && { address:            dto.address }),
+        ...(dto.city               !== undefined && { city:               dto.city }),
+        ...(dto.postalCode         !== undefined && { postalCode:         dto.postalCode }),
+        ...(dto.interventionRadius !== undefined && { interventionRadius: dto.interventionRadius }),
+        updatedAt: new Date(),
+      },
+    });
+
+    return this.prisma.installer.findUnique({
+      where: { userId },
+      include: { certifications: true, projectTypes: true },
+    });
   }
-
-  await this.prisma.installer.update({
-    where: { userId },
-    data: {
-      ...(dto.companyName        !== undefined && { companyName:        dto.companyName }),
-      ...(dto.phone              !== undefined && { phone:              dto.phone }),
-      ...(dto.description        !== undefined && { description:        dto.description }),
-      ...(dto.address            !== undefined && { address:            dto.address }),
-      ...(dto.city               !== undefined && { city:               dto.city }),
-      ...(dto.postalCode         !== undefined && { postalCode:         dto.postalCode }),
-      ...(dto.interventionRadius !== undefined && { interventionRadius: dto.interventionRadius }),
-      updatedAt: new Date(),
-    },
-  });
-
-  return this.prisma.installer.findUnique({
-    where: { userId },
-    include: { certifications: true, projectTypes: true },
-  });
-}
 
   // ─── Recherche géographique ───────────────────────────────────────────────
   async search(dto: SearchInstallersDto) {
-    const coords = await this.geocodeAddress({ address: dto.address });
+    let coords = DEFAULT_COORDS;
+    try {
+      coords = await this.geocodeAddress({ address: dto.address });
+    } catch (e) {
+      console.warn('[search] Géocodage ignoré, recherche depuis Paris par défaut:', (e as any).message);
+    }
+
     const installers: any[] = await this.prisma.$queryRaw`
       SELECT
         i.id, i."companyName", i.city, i."postalCode", i.description,
@@ -168,10 +186,10 @@ export class InstallersService {
     const inst = await this.prisma.installer.findUnique({
       where: { id },
       include: {
-        user: { select: { firstName: true, lastName: true, email: true, phone: true } },
+        user:           { select: { firstName: true, lastName: true, email: true, phone: true } },
         certifications: true,
-        projectTypes: true,
-        reviews: { take: 10, orderBy: { createdAt: 'desc' } },
+        projectTypes:   true,
+        reviews:        { take: 10, orderBy: { createdAt: 'desc' } },
       },
     });
     if (!inst) throw new NotFoundException('Installateur introuvable');
@@ -185,14 +203,7 @@ export class InstallersService {
     });
   }
 
-  // ─── Géocodage API Adresse gouv.fr ───────────────────────────────────────
-  //
-  // Stratégie en 3 niveaux :
-  //   1. Adresse complète  → "12 rue de la Paix, 69001 Lyon"
-  //   2. Code postal seul  → "69001"            (si 1 échoue)
-  //   3. Ville seule       → "Lyon"             (si 2 échoue)
-  //   4. Exception 400     → jamais de fallback Paris silencieux
-  //
+  // ─── Géocodage API Adresse gouv.fr (avec fallback silencieux) ─────────────
   async geocodeAddress(dto: {
     address?: string;
     postalCode?: string;
@@ -211,7 +222,7 @@ export class InstallersService {
         }
         console.warn(`[Geocode] Aucun résultat pour "${q}"`);
       } catch (e) {
-        console.error(`[Geocode] Erreur API pour "${q}" :`, (e as any).message);
+        console.warn(`[Geocode] API indisponible pour "${q}" :`, (e as any).message);
       }
       return null;
     };
@@ -235,10 +246,8 @@ export class InstallersService {
       if (result3) return result3;
     }
 
-    // Aucun résultat → on refuse l'enregistrement avec un message clair
-    throw new BadRequestException(
-      `Impossible de géolocaliser l'adresse : "${fullAddress}". ` +
-      `Vérifiez le code postal (${dto.postalCode || '?'}) et la ville (${dto.city || '?'}).`
-    );
+    // Niveau 4 — fallback silencieux au lieu de lancer une exception
+    console.warn(`[Geocode] Fallback Paris pour : "${fullAddress}"`);
+    return DEFAULT_COORDS;
   }
 }

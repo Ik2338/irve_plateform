@@ -7,6 +7,7 @@ import {
   ArrowLeft, User, Mail, Phone, MapPin, Zap, Calendar,
   CheckCircle, Clock, XCircle, Euro, FileText, Hash, AlertCircle
 } from 'lucide-react';
+import { quotesApi } from '@/lib/api';
 
 const STATUS_CONFIG: Record<string, { label: string; Icon: any; color: string; bg: string }> = {
   SENT:     { label: 'En attente de réponse', Icon: Clock,        color: 'text-orange-600', bg: 'bg-orange-50 border-orange-200' },
@@ -39,15 +40,10 @@ export default function QuoteDetailPage() {
     const token = localStorage.getItem('irve_token');
     if (!token) { router.push('/auth/login'); return; }
 
-    fetch(`http://localhost:3001/quotes/installer/${id}`, {
-      headers: { Authorization: `Bearer ${token}` }
-    })
-      .then(async res => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return res.json();
-      })
-      .then(data => setQuote(data))
-      .catch(e => setError(e.message))
+    // ✅ Passe par nginx /api/ — plus de localhost:3001 hardcodé
+    quotesApi.getOne(id)
+      .then(({ data }) => setQuote(data))
+      .catch((e: any) => setError(e?.response?.data?.message || e.message))
       .finally(() => setLoading(false));
   }, [params?.id]);
 

@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, UseGuards, Query } from '@nestjs/common';
+import { Controller, Get, Post, Delete, Body, Param, UseGuards, HttpCode, HttpStatus } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { RequestsService } from './requests.service';
 import { CreateRequestDto } from './dto/create-request.dto';
@@ -28,5 +28,12 @@ export class RequestsController {
   @ApiOperation({ summary: 'Détail d\'une demande' })
   findOne(@Param('id') id: string, @CurrentUser() user: any) {
     return this.service.findOne(id, user.id);
+  }
+
+  @Delete(':id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Supprimer une demande' })
+  remove(@Param('id') id: string, @CurrentUser() user: any) {
+    return this.service.remove(id, user.id);
   }
 }

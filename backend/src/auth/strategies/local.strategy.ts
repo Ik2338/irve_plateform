@@ -1,4 +1,5 @@
-import { Injectable } from '@nestjs/common';
+// src/auth/strategies/local.strategy.ts
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { Strategy } from 'passport-local';
 import { AuthService } from '../auth.service';
@@ -10,6 +11,14 @@ export class LocalStrategy extends PassportStrategy(Strategy) {
   }
 
   async validate(email: string, password: string) {
-    return this.authService.validateUser(email, password);
+    try {
+      return await this.authService.validateUser(email, password);
+    } catch (err) {
+      // Re-throw proprement — Passport capte les erreurs brutes et ferme
+      // la connexion sans réponse HTTP ; on doit lui passer une vraie exception.
+      throw err instanceof UnauthorizedException
+        ? err
+        : new UnauthorizedException('Identifiants invalides');
+    }
   }
 }

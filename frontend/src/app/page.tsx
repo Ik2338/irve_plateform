@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Zap, Search, Shield, FileText, ArrowRight, CheckCircle } from 'lucide-react';
+import { Zap, Search, Shield, FileText, ArrowRight, CheckCircle, Clock, Star } from 'lucide-react';
 
 export default function HomePage() {
   return (
@@ -44,6 +44,27 @@ export default function HomePage() {
         </div>
       </section>
 
+
+      {/* Avantages */}
+      <section className="max-w-5xl mx-auto px-6 py-16">
+        <div className="grid md:grid-cols-3 gap-8">
+          {[
+            { icon: Shield, title: 'Certifiés Qualifelec', desc: 'Tous nos installateurs sont qualifiés et vérifiés.' },
+            { icon: Clock, title: 'Sous 48 heures', desc: 'Recevez vos premiers devis rapidement.' },
+            { icon: Star, title: 'Avis vérifiés', desc: 'Consultez les retours d\'expérience de nos clients.' },
+          ].map(({ icon: Icon, title, desc }) => (
+            <div key={title} className="card text-center">
+              <div className="w-14 h-14 rounded-2xl mx-auto mb-5 flex items-center justify-center"
+                   style={{ background: 'var(--color-primary-light)' }}>
+                <Icon className="w-7 h-7 text-[var(--color-primary)]" />
+              </div>
+              <h3 className="text-lg font-bold text-[var(--color-text)] mb-2">{title}</h3>
+              <p className="text-sm text-[var(--color-text-secondary)] leading-relaxed">{desc}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
       {/* Steps */}
       <section className="py-20 px-4 max-w-5xl mx-auto">
         <h2 className="text-3xl font-bold text-center mb-12">Comment ça marche ?</h2>
@@ -64,7 +85,6 @@ export default function HomePage() {
           ))}
         </div>
       </section>
-
       {/* Qui sommes-nous */}
       <section className="bg-gray-50 py-16 px-4">
         <div className="max-w-4xl mx-auto text-center">

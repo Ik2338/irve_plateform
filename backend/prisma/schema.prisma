@@ -32,15 +32,16 @@ enum ProjectType {
   RESIDENTIAL
   COMMERCIAL
   COPROPRIETE
-  HOTEL      
-  SYNDIC     
+  HOTEL
+  SYNDIC
 }
+
 enum PowerLevel {
-  P1  // 3.7 kW
-  P2  // 7.4 kW
-  P3  // 11 kW
-  P4  // 22 kW
-  P5  // >22 kW
+  P1 // 3.7 kW
+  P2 // 7.4 kW
+  P3 // 11 kW
+  P4 // 22 kW
+  P5 // >22 kW
 }
 
 enum CertificationLevel {
@@ -67,7 +68,16 @@ model User {
   lastName      String
   phone         String?
   role          UserRole  @default(CLIENT)
-  emailVerified Boolean   @default(false)
+  leads  Lead[]
+  // ── Vérification email ───────────────────────────────────────────────
+  emailVerified              Boolean   @default(false)
+  emailVerificationToken     String?   @unique
+  emailVerificationExpires   DateTime?
+
+  // ── Reset mot de passe ───────────────────────────────────────────────
+  passwordResetToken         String?   @unique
+  passwordResetExpires       DateTime?
+
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
@@ -89,7 +99,7 @@ model Installer {
   description           String?
   website               String?
   logoUrl               String?
-  address               String?   // ← optionnel (pas renseigné à l'inscription)
+  address               String?
   city                  String    @default("")
   postalCode            String    @default("")
   location              Unsupported("geography(Point,4326)")?
@@ -98,7 +108,7 @@ model Installer {
   isActive              Boolean   @default(true)
   averageRating         Float?
   totalReviews          Int       @default(0)
-
+  leads  Lead[]
   // ── Qualifelec ──────────────────────────────
   qualifelecCertNumber  String?
   qualifelecIndices     String[]  @default([])
@@ -114,8 +124,7 @@ model Installer {
   reviews               Review[]
 
   @@map("installers")
-}  // Relations
-  
+}
 
 model InstallerCertification {
   id              String             @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
@@ -167,21 +176,21 @@ model InstallationRequest {
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
 
-  // Relations
   user             User                  @relation(fields: [userId], references: [id])
   quotes           Quote[]
   matches          RequestMatch[]
 
   @@map("installation_requests")
 }
+
 // ─── Matching installateur / demande ─────────────────────────────────────────
 
 model RequestMatch {
   id          String              @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
   requestId   String              @db.Uuid
   installerId String              @db.Uuid
-  distance    Float               // distance en km
-  score       Float               // score de matching 0-100
+  distance    Float
+  score       Float
   notifiedAt  DateTime?
   createdAt   DateTime            @default(now())
 
@@ -208,7 +217,6 @@ model Quote {
   createdAt     DateTime            @default(now())
   updatedAt     DateTime            @updatedAt
 
-  // Relations
   request       InstallationRequest @relation(fields: [requestId], references: [id])
   installer     Installer           @relation(fields: [installerId], references: [id])
   sentBy        User                @relation("InstallerQuotes", fields: [userId], references: [id])
@@ -221,7 +229,7 @@ model Quote {
 model Review {
   id          String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
   installerId String    @db.Uuid
-  rating      Int       // 1-5
+  rating      Int
   comment     String?
   createdAt   DateTime  @default(now())
 
@@ -229,3 +237,29 @@ model Review {
 
   @@map("reviews")
 }
+
+
+// ─── Ajoutez ce modèle dans votre schema.prisma ───────────────────────────
+
+enum LeadStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+}
+
+model Lead{
+  id          String     @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  installerId String     @db.Uuid
+  clientId    String     @db.Uuid
+  address     String
+  message     String
+  status      LeadStatus @default(PENDING)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  installer   Installer  @relation(fields: [installerId], references: [id])
+  client      User       @relation(fields: [clientId], references: [id])
+
+  @@map("leads")
+}
+

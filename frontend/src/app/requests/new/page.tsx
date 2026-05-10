@@ -343,7 +343,7 @@ export default function NewRequestPage() {
                     <label className="label">Code postal</label>
                     <input
                       className="input"
-                      value={form.postalCode} // ✅ was form.zipCode
+                      value={form.postalCode} 
                       onChange={e => setForm(f => ({ ...f, postalCode: e.target.value }))} // ✅ was zipCode
                       placeholder="75001"
                       inputMode="numeric"
