@@ -190,4 +190,28 @@ export class AuthService {
   private signToken(userId: string, email: string, role: string) {
     return this.jwt.sign({ sub: userId, email, role });
   }
+
+  async resetPassword(token: string, password: string) {
+  const user = await this.prisma.user.findFirst({
+    where: {
+      passwordResetToken:   token,
+      passwordResetExpires: { gt: new Date() },   // token still valid
+    },
+  });
+
+  if (!user) throw new BadRequestException('Lien invalide ou expiré.');
+
+  const hashed = await bcrypt.hash(password, 12);
+
+  await this.prisma.user.update({
+    where: { id: user.id },
+    data: {
+      password:             hashed,
+      passwordResetToken:   null,
+      passwordResetExpires: null,
+    },
+  });
+
+  return { message: 'Mot de passe réinitialisé avec succès.' };
+}
 }

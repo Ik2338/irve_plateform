@@ -36,15 +36,14 @@ api.interceptors.response.use(
 
 // ─── Auth ────────────────────────────────
 export const authApi = {
-  register:            (data: any)     => api.post('/auth/register', data),
-  login:               (data: any)     => api.post('/auth/login', data),
-  me:                  ()              => api.get('/auth/me'),
-  verifyEmail:         (token: string) => api.get(`/auth/verify-email?token=${encodeURIComponent(token)}`),
-  resendVerification:  (email: string) => api.post('/auth/resend-verification', { email }),
-  forgotPassword:      (email: string) => api.post('/auth/forgot-password', { email }),
-  resetPassword:       (token: string, password: string) => api.post('/auth/reset-password', { token, password }),
+  register:           (data: any)                        => api.post('/auth/register', data),
+  login:              (data: any)                        => api.post('/auth/login', data),
+  me:                 ()                                 => api.get('/auth/me'),
+  verifyEmail:        (token: string)                    => api.get(`/auth/verify-email?token=${encodeURIComponent(token)}`),
+  resendVerification: (email: string)                    => api.post('/auth/resend-verification', { email }),
+  forgotPassword:     (email: string)                    => api.post('/auth/forgot-password', { email }),
+  resetPassword:      (token: string, password: string)  => api.post('/auth/reset-password', { token, password }),
 };
-
 // ─── Demandes ────────────────────────────
 export const requestsApi = {
   create: (data: any)  => api.post('/requests', data),
