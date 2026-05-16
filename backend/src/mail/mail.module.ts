@@ -1,9 +1,8 @@
-// src/mail/mail.module.ts
 import { Module } from '@nestjs/common';
 import { MailService } from './mail.service';
 
 @Module({
   providers: [MailService],
-  exports: [MailService],
+  exports:   [MailService],   // ← exporté pour RequestsModule
 })
 export class MailModule {}

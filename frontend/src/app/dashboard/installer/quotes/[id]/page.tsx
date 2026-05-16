@@ -1,233 +1,341 @@
 'use client';
-import { useEffect, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
-import InstallerNav from '@/components/InstallerNav';
-import Link from 'next/link';
-import {
-  ArrowLeft, User, Mail, Phone, MapPin, Zap, Calendar,
-  CheckCircle, Clock, XCircle, Euro, FileText, Hash, AlertCircle
-} from 'lucide-react';
-import { quotesApi } from '@/lib/api';
 
-const STATUS_CONFIG: Record<string, { label: string; Icon: any; color: string; bg: string }> = {
-  SENT:     { label: 'En attente de réponse', Icon: Clock,        color: 'text-orange-600', bg: 'bg-orange-50 border-orange-200' },
-  ACCEPTED: { label: 'Devis accepté !',        Icon: CheckCircle, color: 'text-green-600',  bg: 'bg-green-50 border-green-200' },
-  REFUSED:  { label: 'Devis refusé',           Icon: XCircle,     color: 'text-red-600',    bg: 'bg-red-50 border-red-200' },
-  EXPIRED:  { label: 'Devis expiré',           Icon: AlertCircle, color: 'text-gray-500',   bg: 'bg-gray-50 border-gray-200' },
-};
+import { useEffect, useState } from 'react';
+import { useParams } from 'next/navigation';
+import Link from 'next/link';
+import { ArrowLeft, Zap, CheckCircle, Clock, XCircle, User, MapPin, Euro, Wrench, FlagTriangleRight } from 'lucide-react';
+import { quotesApi, requestsApi } from '@/lib/api';
+import toast from 'react-hot-toast';
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const PROJ_LABELS: Record<string, string> = {
-  RESIDENTIAL: 'Particulier', COMMERCIAL: 'Entreprise', COPROPRIETE: 'Copropriété'
+  RESIDENTIAL: 'Particulier', COMMERCIAL: 'Entreprise',
+  COPROPRIETE: 'Copropriété', HOTEL: 'Hôtel', SYNDIC: 'Syndic',
 };
-
 const POWER_LABELS: Record<string, string> = {
-  P1: '3,7 kW', P2: '7,4 kW', P3: '11 kW', P4: '22 kW', P5: '> 22 kW'
+  P1: '3,7 kW', P2: '7,4 kW', P3: '11 kW', P4: '22 kW', P5: '> 22 kW',
 };
 
-const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+// ── Types ──────────────────────────────────────────────────────────────────────
+interface QuoteUser {
+  firstName?: string;
+  lastName?:  string;
+  email?:     string;
+  phone?:     string;
+}
 
-export default function QuoteDetailPage() {
+interface QuoteRequest {
+  id:          string;
+  status:      string;
+  projectType: string;
+  powerLevel:  string;
+  address?:    string;
+  city?:       string;
+  user?:       QuoteUser;
+}
+
+interface QuoteInstaller {
+  companyName?: string;
+  city?:        string;
+}
+
+interface Quote {
+  id:           string;
+  status:       string;
+  createdAt:    string;
+  validUntil?:  string;
+  laborCost?:   number;
+  materialCost?: number;
+  vatRate?:     number;
+  notes?:       string;
+  installer?:   QuoteInstaller;
+  request?:     QuoteRequest;
+}
+
+export default function InstallerQuoteDetailPage() {
   const params = useParams();
-  const router = useRouter();
-  const [quote, setQuote] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const id = typeof params?.id === 'string' ? params.id : undefined;
+
+  const [quote,    setQuote]    = useState<Quote | null>(null);
+  const [loading,  setLoading]  = useState(false);
+  const [error,    setError]    = useState('');
+  const [updating, setUpdating] = useState(false);
+  // Local copy of request status so UI updates instantly after action
+  const [reqStatus, setReqStatus] = useState<string>('');
+
+  if (!id || !UUID_RE.test(id)) return null;
 
   useEffect(() => {
-    const id = params?.id as string;
-    if (!id || !UUID_REGEX.test(id)) return;
-
-    const token = localStorage.getItem('irve_token');
-    if (!token) { router.push('/auth/login'); return; }
-
-    // ✅ Passe par nginx /api/ — plus de localhost:3001 hardcodé
-    quotesApi.getOne(id)
-      .then(({ data }) => setQuote(data))
-      .catch((e: any) => setError(e?.response?.data?.message || e.message))
+    setLoading(true);
+    quotesApi.getOneForInstaller(id)
+      .then(({ data }: { data: Quote }) => {
+        setQuote(data);
+        setReqStatus(data.request?.status ?? '');
+      })
+      .catch((err: any) => setError(
+        err?.response?.data?.message || err?.message || 'Devis introuvable ou accès refusé.',
+      ))
       .finally(() => setLoading(false));
-  }, [params?.id]);
+  }, [id]);
+
+  // ── Mise à jour du statut de la demande ────────────────────────────────────
+  const updateInstallationStatus = async (newStatus: 'INSTALLATION' | 'COMPLETED') => {
+    if (!quote?.request?.id) return;
+    setUpdating(true);
+    try {
+      await requestsApi.updateStatus(quote.request.id, newStatus);
+      setReqStatus(newStatus);
+      toast.success(
+        newStatus === 'INSTALLATION'
+          ? 'Installation démarrée !'
+          : 'Installation marquée comme terminée !'
+      );
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || 'Erreur lors de la mise à jour');
+    } finally {
+      setUpdating(false);
+    }
+  };
 
   if (loading) return (
-    <div className="min-h-screen flex items-center justify-center">
+    <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full" />
     </div>
   );
 
-  if (error || !quote) return (
-    <div className="min-h-screen bg-gray-50">
-      <InstallerNav />
-      <div className="max-w-3xl mx-auto px-4 py-8 text-center">
-        <p className="text-gray-500 mb-4">{error || 'Devis introuvable'}</p>
-        <Link href="/dashboard/installer/quotes" className="btn-outline flex items-center gap-2 w-fit mx-auto">
-          <ArrowLeft className="w-4 h-4" />Retour aux devis
+  if (error) return (
+    <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 gap-4 px-4">
+      <div className="card max-w-sm w-full text-center py-10 space-y-3">
+        <p className="text-red-600 font-medium">{error}</p>
+        <Link href="/dashboard/installer" className="btn-outline text-sm inline-flex items-center gap-1">
+          <ArrowLeft className="w-4 h-4" />Retour au tableau de bord
         </Link>
       </div>
     </div>
   );
 
-  const status = STATUS_CONFIG[quote.status] || STATUS_CONFIG['SENT'];
-  const StatusIcon = status.Icon;
-  const vatAmount = (quote.amount * quote.vatRate) / 100;
-  const totalTTC = quote.amount + vatAmount;
-  const client = quote.request?.user;
-  const request = quote.request;
+  if (!quote) return null;
+
+  const totalHT  = (quote.laborCost ?? 0) + (quote.materialCost ?? 0);
+  const tva      = totalHT * ((quote.vatRate ?? 20) / 100);
+  const totalTTC = totalHT + tva;
+
+  const statusConfig: Record<string, { label: string; color: string; Icon: any }> = {
+    SENT:     { label: 'En attente',  color: 'bg-orange-100 text-orange-700', Icon: Clock       },
+    ACCEPTED: { label: 'Accepté',     color: 'bg-green-100  text-green-700',  Icon: CheckCircle },
+    REFUSED:  { label: 'Refusé',      color: 'bg-red-100    text-red-700',    Icon: XCircle     },
+  };
+  const quoteStatus = statusConfig[quote.status] ?? { label: quote.status, color: 'bg-gray-100 text-gray-700', Icon: Clock };
+
+  const showInstallationBlock = quote.status === 'ACCEPTED';
+
+  const installationStep =
+    reqStatus === 'COMPLETED'    ? 'done'    :
+    reqStatus === 'INSTALLATION' ? 'ongoing' :
+    'pending';
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <InstallerNav />
-      <div className="max-w-3xl mx-auto px-4 py-8 space-y-4">
+      <nav className="bg-white border-b px-4 py-4 flex items-center justify-between">
+        <Link href="/" className="flex items-center gap-2 font-bold text-primary">
+          <Zap className="w-5 h-5" />IRVE Platform
+        </Link>
+        <Link href="/dashboard/installer" className="flex items-center gap-1 text-sm text-gray-600 hover:text-primary">
+          <ArrowLeft className="w-4 h-4" />Tableau de bord
+        </Link>
+      </nav>
 
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <Link href="/dashboard/installer/quotes"
-            className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-primary transition-colors">
-            <ArrowLeft className="w-4 h-4" />Retour aux devis
-          </Link>
-          <span className="text-xs text-gray-400">
-            Devis du {new Date(quote.createdAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}
-          </span>
+      <div className="max-w-2xl mx-auto px-4 py-8 space-y-4">
+
+        {/* ── Header ── */}
+        <div className="card">
+          <div className="flex items-center justify-between mb-3">
+            <h1 className="text-lg font-bold text-gray-900">Détail du devis</h1>
+            <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${quoteStatus.color}`}>
+              <quoteStatus.Icon className="w-3.5 h-3.5" />
+              {quoteStatus.label}
+            </span>
+          </div>
+          <p className="text-xs text-gray-400">
+            Envoyé le {new Date(quote.createdAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}
+            {quote.validUntil && (
+              <> · Valable jusqu'au {new Date(quote.validUntil).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}</>
+            )}
+          </p>
         </div>
 
-        {/* Statut */}
-        <div className={`card border flex items-center gap-3 ${status.bg}`}>
-          <StatusIcon className={`w-5 h-5 flex-shrink-0 ${status.color}`} />
-          <div>
-            <p className={`font-semibold ${status.color}`}>{status.label}</p>
-            {quote.status === 'SENT' && (
-              <p className="text-xs text-gray-500 mt-0.5">
-                Valide jusqu'au {new Date(quote.validUntil).toLocaleDateString('fr-FR')}
-              </p>
+        {/* ── Suivi de l'installation ─────────────────────────────────────── */}
+        {showInstallationBlock && (
+          <div className={`card border-2 ${
+            installationStep === 'done'    ? 'border-green-200 bg-green-50'  :
+            installationStep === 'ongoing' ? 'border-blue-200  bg-blue-50'   :
+            'border-gray-200'
+          }`}>
+            <h2 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+              <Wrench className="w-4 h-4 text-primary" />
+              Suivi de l'installation
+            </h2>
+
+            {/* Stepper visuel */}
+            <div className="flex items-center gap-2 mb-5">
+              {[
+                { key: 'pending', label: 'Devis accepté'   },
+                { key: 'ongoing', label: 'En installation' },
+                { key: 'done',    label: 'Terminée'        },
+              ].map((step, i, arr) => {
+                const reached =
+                  (step.key === 'pending')                                                    ||
+                  (step.key === 'ongoing' && ['ongoing', 'done'].includes(installationStep))  ||
+                  (step.key === 'done'    && installationStep === 'done');
+                const active = step.key === installationStep;
+                return (
+                  <div key={step.key} className="flex items-center flex-1">
+                    <div className="flex flex-col items-center flex-1 gap-1">
+                      <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
+                        reached
+                          ? active
+                            ? 'bg-primary text-white ring-4 ring-primary/20'
+                            : 'bg-green-500 text-white'
+                          : 'bg-gray-200 text-gray-400'
+                      }`}>
+                        {reached && !active ? '✓' : i + 1}
+                      </div>
+                      <span className={`text-[10px] font-medium text-center leading-tight ${
+                        active ? 'text-primary' : reached ? 'text-green-600' : 'text-gray-400'
+                      }`}>
+                        {step.label}
+                      </span>
+                    </div>
+                    {i < arr.length - 1 && (
+                      <div className={`h-0.5 w-8 flex-shrink-0 -mt-4 mx-1 ${
+                        ['ongoing', 'done'].includes(installationStep) && i === 0 ? 'bg-green-400' :
+                        installationStep === 'done' && i === 1                    ? 'bg-green-400' :
+                        'bg-gray-200'
+                      }`} />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Boutons d'action */}
+            {installationStep === 'pending' && (
+              <button
+                onClick={() => updateInstallationStatus('INSTALLATION')}
+                disabled={updating}
+                className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white font-semibold py-3 rounded-xl transition-colors text-sm"
+              >
+                <Wrench className="w-4 h-4" />
+                {updating ? 'Mise à jour…' : "Démarrer l'installation"}
+              </button>
+            )}
+
+            {installationStep === 'ongoing' && (
+              <button
+                onClick={() => updateInstallationStatus('COMPLETED')}
+                disabled={updating}
+                className="w-full flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 disabled:opacity-60 text-white font-semibold py-3 rounded-xl transition-colors text-sm"
+              >
+                <FlagTriangleRight className="w-4 h-4" />
+                {updating ? 'Mise à jour…' : "Marquer comme terminée"}
+              </button>
+            )}
+
+            {installationStep === 'done' && (
+              <div className="flex items-center justify-center gap-2 text-green-700 font-semibold text-sm py-2">
+                <CheckCircle className="w-5 h-5" />
+                Installation terminée — dossier clôturé
+              </div>
             )}
           </div>
-        </div>
+        )}
 
-        {/* Infos client */}
+        {/* ── Récapitulatif financier ── */}
         <div className="card">
-          <div className="flex items-center gap-2 mb-4 font-semibold text-gray-700 text-sm">
-            <User className="w-4 h-4 text-primary" />Informations client
+          <div className="flex items-center gap-2 mb-4">
+            <Euro className="w-4 h-4 text-primary" />
+            <h2 className="font-semibold text-gray-900">Récapitulatif du devis</h2>
           </div>
-          <div className="space-y-3">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-primary text-white rounded-full flex items-center justify-center font-bold text-sm flex-shrink-0">
-                {client?.firstName?.[0]}{client?.lastName?.[0]}
-              </div>
-              <div>
-                <p className="font-semibold text-gray-900">{client?.firstName} {client?.lastName}</p>
-                <p className="text-xs text-gray-400">
-                  Client depuis {client?.createdAt ? new Date(client.createdAt).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' }) : '—'}
-                </p>
-              </div>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-gray-50">
-              {client?.email && (
-                <a href={`mailto:${client.email}`}
-                  className="flex items-center gap-2 text-sm text-gray-700 hover:text-primary transition-colors">
-                  <div className="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                    <Mail className="w-4 h-4 text-gray-500" />
-                  </div>
-                  <span className="truncate">{client.email}</span>
-                </a>
-              )}
-              {client?.phone ? (
-                <a href={`tel:${client.phone}`}
-                  className="flex items-center gap-2 text-sm text-gray-700 hover:text-primary transition-colors">
-                  <div className="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                    <Phone className="w-4 h-4 text-gray-500" />
-                  </div>
-                  {client.phone}
-                </a>
-              ) : (
-                <div className="flex items-center gap-2 text-sm text-gray-400">
-                  <div className="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                    <Phone className="w-4 h-4 text-gray-300" />
-                  </div>
-                  Téléphone non renseigné
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Détails de la demande */}
-        <div className="card">
-          <div className="flex items-center gap-2 mb-4 font-semibold text-gray-700 text-sm">
-            <FileText className="w-4 h-4 text-primary" />Détails de la demande
-          </div>
-          <div className="grid grid-cols-2 gap-3">
+          <dl className="divide-y divide-gray-100">
             {[
-              { Icon: Hash,     label: 'Type de projet',   value: PROJ_LABELS[request?.projectType] || request?.projectType },
-              { Icon: Zap,      label: 'Puissance',        value: `${request?.powerLevel} — ${POWER_LABELS[request?.powerLevel] || ''}` },
-              { Icon: MapPin,   label: 'Adresse',          value: `${request?.address || ''}, ${request?.city || ''}` },
-              { Icon: Calendar, label: 'Demande créée le', value: new Date(request?.createdAt).toLocaleDateString('fr-FR') },
-            ].map(({ Icon, label, value }) => (
-              <div key={label} className="bg-gray-50 rounded-xl p-3">
-                <div className="flex items-center gap-1.5 text-xs text-gray-400 mb-1">
-                  <Icon className="w-3 h-3" />{label}
-                </div>
-                <p className="text-sm font-medium text-gray-800">{value}</p>
+              { label: 'Installateur',   value: quote.installer?.companyName ?? '—' },
+              { label: 'Type de projet', value: PROJ_LABELS[quote.request?.projectType ?? ''] ?? quote.request?.projectType ?? '—' },
+              { label: "Main d'œuvre",   value: `${(quote.laborCost ?? 0).toLocaleString('fr-FR', { minimumFractionDigits: 2 })} €` },
+              { label: 'Matériel',       value: `${(quote.materialCost ?? 0).toLocaleString('fr-FR', { minimumFractionDigits: 2 })} €` },
+              { label: `TVA (${quote.vatRate ?? 20}%)`, value: `${tva.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} €` },
+            ].map(row => (
+              <div key={row.label} className="py-3 flex justify-between gap-4">
+                <dt className="text-sm text-gray-500">{row.label}</dt>
+                <dd className="text-sm font-semibold text-gray-800">{row.value}</dd>
               </div>
             ))}
-          </div>
-          {request?.description && (
-            <div className="mt-3 bg-gray-50 rounded-xl p-3">
-              <p className="text-xs text-gray-400 mb-1">Description</p>
-              <p className="text-sm text-gray-700">{request.description}</p>
+            <div className="py-3 flex justify-between gap-4">
+              <dt className="text-base font-bold text-gray-900">Total TTC</dt>
+              <dd className="text-base font-bold text-primary">
+                {totalTTC.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} €
+              </dd>
             </div>
-          )}
-          {request?.hasExistingPanel && (
-            <div className="flex items-center gap-1.5 mt-3 text-xs text-green-700">
-              <CheckCircle className="w-3.5 h-3.5" />Tableau électrique existant à proximité
-            </div>
-          )}
-        </div>
-
-        {/* Montants du devis */}
-        <div className="card">
-          <div className="flex items-center gap-2 mb-4 font-semibold text-gray-700 text-sm">
-            <Euro className="w-4 h-4 text-primary" />Détail financier du devis
-          </div>
-          <div className="space-y-2">
-            <div className="flex justify-between text-sm py-2 border-b border-gray-50">
-              <span className="text-gray-500">Main d'œuvre</span>
-              <span className="font-medium">{quote.laborCost?.toLocaleString('fr-FR')} € HT</span>
-            </div>
-            <div className="flex justify-between text-sm py-2 border-b border-gray-50">
-              <span className="text-gray-500">Matériel</span>
-              <span className="font-medium">{quote.materialCost?.toLocaleString('fr-FR')} € HT</span>
-            </div>
-            <div className="flex justify-between text-sm py-2 border-b border-gray-50">
-              <span className="text-gray-500">Total HT</span>
-              <span className="font-medium">{quote.amount?.toLocaleString('fr-FR')} €</span>
-            </div>
-            <div className="flex justify-between text-sm py-2 border-b border-gray-50">
-              <span className="text-gray-500">TVA ({quote.vatRate}%)</span>
-              <span className="font-medium">{vatAmount.toLocaleString('fr-FR')} €</span>
-            </div>
-            <div className="flex justify-between py-3 bg-primary-light rounded-xl px-3">
-              <span className="font-bold text-gray-800">Total TTC</span>
-              <span className="font-bold text-primary text-lg">{totalTTC.toLocaleString('fr-FR')} €</span>
-            </div>
-          </div>
+          </dl>
           {quote.notes && (
-            <div className="mt-4 bg-gray-50 rounded-xl p-3">
-              <p className="text-xs text-gray-400 mb-1">Notes / Conditions</p>
+            <div className="mt-4 pt-4 border-t border-gray-100">
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Notes</p>
               <p className="text-sm text-gray-700 italic">"{quote.notes}"</p>
             </div>
           )}
         </div>
 
-        {/* Actions rapides */}
-        {quote.status === 'ACCEPTED' && client?.phone && (
-          <div className="card border-green-200 bg-green-50">
-            <p className="text-sm font-semibold text-green-800 mb-3">✅ Devis accepté — Contactez le client pour planifier l'intervention</p>
-            <div className="flex gap-3">
-              <a href={`tel:${client.phone}`} className="btn-primary text-sm flex items-center gap-2">
-                <Phone className="w-4 h-4" />Appeler {client.firstName}
-              </a>
-              <a href={`mailto:${client.email}`} className="btn-outline text-sm flex items-center gap-2">
-                <Mail className="w-4 h-4" />Envoyer un email
-              </a>
+        {/* ── Demande associée ── */}
+        {quote.request && (
+          <div className="card">
+            <div className="flex items-center gap-2 mb-4">
+              <MapPin className="w-4 h-4 text-primary" />
+              <h2 className="font-semibold text-gray-900">Demande associée</h2>
             </div>
+            <dl className="divide-y divide-gray-100">
+              {[
+                { label: 'Type de projet', value: PROJ_LABELS[quote.request.projectType] ?? quote.request.projectType },
+                { label: 'Puissance',      value: `${quote.request.powerLevel} — ${POWER_LABELS[quote.request.powerLevel] ?? ''}` },
+                { label: 'Adresse',        value: `${quote.request.address ?? ''}, ${quote.request.city ?? ''}` },
+              ].map(row => (
+                <div key={row.label} className="py-3 flex justify-between gap-4">
+                  <dt className="text-sm text-gray-500 shrink-0 w-40">{row.label}</dt>
+                  <dd className="text-sm font-semibold text-gray-800 text-right">{row.value}</dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+        )}
+
+        {/* ── Infos client ── */}
+        {quote.request?.user && (
+          <div className="card">
+            <div className="flex items-center gap-2 mb-4">
+              <User className="w-4 h-4 text-primary" />
+              <h2 className="font-semibold text-gray-900">Client</h2>
+            </div>
+            <div className="flex items-center gap-4">
+              <div className="w-11 h-11 rounded-full bg-primary-light flex items-center justify-center text-primary font-bold text-lg flex-shrink-0">
+                {quote.request.user.firstName?.[0]}{quote.request.user.lastName?.[0]}
+              </div>
+              <div>
+                <p className="font-semibold text-gray-800">
+                  {quote.request.user.firstName} {quote.request.user.lastName}
+                </p>
+                <p className="text-sm text-gray-500">{quote.request.user.email}</p>
+                {quote.request.user.phone && (
+                  <p className="text-sm text-gray-500">{quote.request.user.phone}</p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Devis refusé ── */}
+        {quote.status === 'REFUSED' && (
+          <div className="card border-red-200 bg-red-50 text-center py-6 space-y-2">
+            <XCircle className="w-10 h-10 text-red-400 mx-auto" />
+            <p className="text-red-800 font-semibold">Ce devis a été refusé par le client.</p>
           </div>
         )}
 

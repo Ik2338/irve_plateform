@@ -3,7 +3,10 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import ClientNav from '@/components/ClientNav';
-import { Plus, FileText, Clock, CheckCircle, Trash2, AlertTriangle } from 'lucide-react';
+import {
+  Plus, FileText, Clock, CheckCircle, Trash2,
+  AlertTriangle, UserCheck, Zap,
+} from 'lucide-react';
 import { requestsApi, quotesApi } from '@/lib/api';
 import {
   STATUS_LABELS,
@@ -16,8 +19,9 @@ import {
   type PowerLevel,
 } from '@/types';
 import toast from 'react-hot-toast';
+import { RatingModal, usePendingRatingRequest } from '@/components/RatingModal';
 
-// ─── Badge de statut ──────────────────────────────────────────────────────────
+// ─── Couleurs de statut ───────────────────────────────────────────────────────
 const STATUS_COLORS: Record<string, string> = {
   DRAFT:           'badge-orange',
   SUBMITTED:       'badge-blue',
@@ -33,10 +37,9 @@ const STATUS_COLORS: Record<string, string> = {
   CANCELLED:       'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-500',
 };
 
-// Statuts où la suppression est interdite (trop avancé)
-const NON_DELETABLE_STATUSES = ['IN_PROGRESS', 'COMPLETED'];
+const NON_DELETABLE_STATUSES = ['INSTALLATION', 'MISE_EN_SERVICE', 'COMPLETED'];
 
-// ─── Modal de confirmation ────────────────────────────────────────────────────
+// ─── Modal suppression ────────────────────────────────────────────────────────
 function ConfirmDeleteModal({
   onConfirm,
   onCancel,
@@ -48,9 +51,7 @@ function ConfirmDeleteModal({
 }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      {/* Backdrop */}
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onCancel} />
-      {/* Dialog */}
       <div className="relative bg-white rounded-2xl shadow-xl max-w-sm w-full p-6">
         <div className="flex flex-col items-center text-center gap-3">
           <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
@@ -62,11 +63,7 @@ function ConfirmDeleteModal({
           </p>
         </div>
         <div className="flex gap-3 mt-6">
-          <button
-            className="flex-1 btn-outline text-sm py-2"
-            onClick={onCancel}
-            disabled={loading}
-          >
+          <button className="flex-1 btn-outline text-sm py-2" onClick={onCancel} disabled={loading}>
             Annuler
           </button>
           <button
@@ -82,7 +79,55 @@ function ConfirmDeleteModal({
   );
 }
 
-// ─── Pipeline visuel pour une demande ─────────────────────────────────────────
+// ─── Modal confirmation réception ─────────────────────────────────────────────
+function ConfirmReceptionModal({
+  request,
+  onConfirm,
+  onCancel,
+  loading,
+}: {
+  request: any;
+  onConfirm: () => void;
+  onCancel: () => void;
+  loading: boolean;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onCancel} />
+      <div className="relative bg-white rounded-2xl shadow-xl max-w-sm w-full p-6">
+        <div className="flex flex-col items-center text-center gap-3">
+          <div className="w-14 h-14 bg-green-100 rounded-full flex items-center justify-center">
+            <CheckCircle className="w-7 h-7 text-green-500" />
+          </div>
+          <h3 className="text-lg font-semibold text-gray-900">Confirmer la réception ?</h3>
+          <p className="text-sm text-gray-500 leading-relaxed">
+            En confirmant, vous attestez que l'installation a bien été réalisée.
+            Le paiement de l'installateur sera alors débloqué.
+          </p>
+          {request?.acceptedInstaller && (
+            <p className="text-sm font-semibold text-gray-700">
+              Installateur : {request.acceptedInstaller.companyName}
+            </p>
+          )}
+        </div>
+        <div className="flex gap-3 mt-6">
+          <button className="flex-1 btn-outline text-sm py-2" onClick={onCancel} disabled={loading}>
+            Annuler
+          </button>
+          <button
+            className="flex-1 bg-green-500 hover:bg-green-600 text-white text-sm font-medium py-2 px-4 rounded-lg transition-colors disabled:opacity-60"
+            onClick={onConfirm}
+            disabled={loading}
+          >
+            {loading ? 'Confirmation…' : '✓ Confirmer la réception'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Pipeline visuel ──────────────────────────────────────────────────────────
 function RequestPipeline({ status }: { status: RequestStatus }) {
   const currentStepIndex = getPipelineStep(status);
   const isCancelled = status === 'CANCELLED';
@@ -99,26 +144,30 @@ function RequestPipeline({ status }: { status: RequestStatus }) {
   return (
     <div className="flex items-center gap-1 mt-3">
       {PIPELINE_STEPS.map((s, i) => {
-        const done    = i < currentStepIndex;
-        const active  = i === currentStepIndex;
+        const done   = i < currentStepIndex;
+        const active = i === currentStepIndex;
         return (
           <div key={s.key} className="flex items-center gap-1 flex-1">
             <div className="flex-1 flex flex-col items-center gap-1">
-              <div className={`w-2.5 h-2.5 rounded-full transition-all
-                ${done   ? 'bg-green-500'
-                : active ? 'bg-primary ring-2 ring-primary/25'
-                : 'bg-gray-200'}`}
+              <div
+                className={`w-2.5 h-2.5 rounded-full transition-all
+                  ${done   ? 'bg-green-500'
+                  : active ? 'bg-primary ring-2 ring-primary/25'
+                  : 'bg-gray-200'}`}
               />
-              <span className={`text-[10px] font-medium text-center leading-tight hidden sm:block
-                ${done   ? 'text-green-600'
-                : active ? 'text-primary'
-                : 'text-gray-300'}`}>
+              <span
+                className={`text-[10px] font-medium text-center leading-tight hidden sm:block
+                  ${done   ? 'text-green-600'
+                  : active ? 'text-primary'
+                  : 'text-gray-300'}`}
+              >
                 {s.label}
               </span>
             </div>
             {i < PIPELINE_STEPS.length - 1 && (
-              <div className={`h-0.5 w-full max-w-[24px] flex-shrink-0 -mt-3.5
-                ${done ? 'bg-green-400' : 'bg-gray-200'}`}
+              <div
+                className={`h-0.5 w-full max-w-[24px] flex-shrink-0 -mt-3.5
+                  ${done ? 'bg-green-400' : 'bg-gray-200'}`}
               />
             )}
           </div>
@@ -128,16 +177,26 @@ function RequestPipeline({ status }: { status: RequestStatus }) {
   );
 }
 
-// ─── Composant principal ──────────────────────────────────────────────────────
+// ─── Page principale ──────────────────────────────────────────────────────────
 export default function DashboardPage() {
   const router = useRouter();
   const [requests, setRequests] = useState<any[]>([]);
   const [quotes, setQuotes]     = useState<any[]>([]);
   const [loading, setLoading]   = useState(true);
 
-  // État pour le modal de suppression
+  // Suppression
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [deleting, setDeleting]         = useState(false);
+
+  // Confirmation réception
+  const [confirmTarget, setConfirmTarget]   = useState<any>(null);
+  const [confirming, setConfirming]         = useState(false);
+
+  // Rating post-confirmation
+  const [ratingRequest, setRatingRequest]   = useState<any>(null);
+
+  // Hook rating auto (demandes COMPLETED déjà existantes)
+  const { pending: autoPending, dismiss: autoDismiss } = usePendingRatingRequest(requests);
 
   useEffect(() => {
     const u = localStorage.getItem('irve_user');
@@ -147,6 +206,7 @@ export default function DashboardPage() {
       .finally(() => setLoading(false));
   }, []);
 
+  // ── Supprimer une demande ──
   const handleDelete = async () => {
     if (!deleteTarget) return;
     setDeleting(true);
@@ -162,21 +222,58 @@ export default function DashboardPage() {
     }
   };
 
-  if (loading) return (
-    <div className="min-h-screen flex items-center justify-center">
-      <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full" />
-    </div>
-  );
+  // ── Confirmer la réception (client) → COMPLETED ──
+  const handleConfirmReception = async () => {
+    if (!confirmTarget) return;
+    setConfirming(true);
+    try {
+      await requestsApi.updateStatus(confirmTarget.id, 'COMPLETED');
+      toast.success('Installation confirmée !');
+      // Mettre à jour localement
+      const updated = { ...confirmTarget, status: 'COMPLETED' };
+      setRequests(prev => prev.map(r => r.id === confirmTarget.id ? updated : r));
+      setConfirmTarget(null);
+      // Déclencher le rating modal
+      setRatingRequest(updated);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || 'Erreur lors de la confirmation');
+    } finally {
+      setConfirming(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full" />
+      </div>
+    );
+  }
 
   const activeRequests    = requests.filter(r => !['COMPLETED', 'CANCELLED'].includes(r.status));
   const completedRequests = requests.filter(r => r.status === 'COMPLETED');
   const pendingQuotes     = quotes.filter(q => q.status === 'SENT');
 
+  // Récupère l'installateur accepté pour un rating
+  const getRatingInstaller = (req: any) => {
+    const acceptedQuote = quotes.find(q => q.requestId === req.id && q.status === 'ACCEPTED');
+    return {
+      id:   acceptedQuote?.installerId   || req.acceptedInstaller?.id   || '',
+      name: acceptedQuote?.installer?.companyName || req.acceptedInstaller?.companyName || 'Votre installateur',
+    };
+  };
+
+  // Rating à afficher : priorité au post-confirmation, sinon auto-pending
+  const activeRatingRequest = ratingRequest ?? autoPending;
+  const activeRatingDismiss = ratingRequest
+    ? () => setRatingRequest(null)
+    : () => autoDismiss(autoPending?.id);
+
   return (
     <div className="min-h-screen bg-gray-50">
       <ClientNav />
 
-      {/* Modal de confirmation */}
+      {/* ── Modals ── */}
       {deleteTarget && (
         <ConfirmDeleteModal
           onConfirm={handleDelete}
@@ -184,6 +281,25 @@ export default function DashboardPage() {
           loading={deleting}
         />
       )}
+      {confirmTarget && (
+        <ConfirmReceptionModal
+          request={confirmTarget}
+          onConfirm={handleConfirmReception}
+          onCancel={() => setConfirmTarget(null)}
+          loading={confirming}
+        />
+      )}
+      {activeRatingRequest && (() => {
+        const inst = getRatingInstaller(activeRatingRequest);
+        return (
+          <RatingModal
+            request={activeRatingRequest}
+            installerId={inst.id}
+            installerName={inst.name}
+            onDismiss={activeRatingDismiss}
+          />
+        );
+      })()}
 
       <div className="max-w-4xl mx-auto px-4 py-8">
 
@@ -224,9 +340,29 @@ export default function DashboardPage() {
         ) : (
           <div className="space-y-3 mb-8">
             {requests.map(r => {
-              const canDelete = !NON_DELETABLE_STATUSES.includes(r.status);
+              const canDelete      = !NON_DELETABLE_STATUSES.includes(r.status);
+              const isDirectRequest = r.source === 'DIRECT';
+              const isMiseEnService = r.status === 'MISE_EN_SERVICE';
+
               return (
-                <div key={r.id} className="card">
+                <div
+                  key={r.id}
+                  className={`card transition-all ${
+                    isMiseEnService
+                      ? 'border-orange-300 bg-orange-50 shadow-orange-100 shadow-md'
+                      : ''
+                  }`}
+                >
+                  {/* ⚡ Bannière action requise */}
+                  {isMiseEnService && (
+                    <div className="flex items-center gap-2 mb-3 px-3 py-2 bg-orange-100 rounded-lg">
+                      <Zap className="w-4 h-4 text-orange-500 flex-shrink-0" />
+                      <p className="text-sm text-orange-700 font-medium">
+                        L'installateur a terminé — confirmez la réception pour débloquer son paiement.
+                      </p>
+                    </div>
+                  )}
+
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
                       {/* Titre */}
@@ -238,24 +374,56 @@ export default function DashboardPage() {
                         <span className="text-sm text-gray-600">
                           {POWER_LEVEL_SHORT[r.powerLevel as PowerLevel] || r.powerLevel}
                         </span>
+                        {isDirectRequest && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-violet-100 text-violet-700">
+                            <UserCheck className="w-3 h-3" />
+                            Demande personnelle
+                          </span>
+                        )}
+                        {isMiseEnService && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-orange-200 text-orange-700 animate-pulse">
+                            ⚡ Action requise
+                          </span>
+                        )}
                       </div>
                       {/* Adresse */}
                       <p className="text-sm text-gray-500 mt-0.5">{r.address}, {r.city}</p>
-                      {/* Compteur devis */}
+                      {isDirectRequest && r.targetInstaller && (
+                        <p className="text-xs text-violet-600 mt-0.5 font-medium">
+                          Envoyée à : {r.targetInstaller.companyName || r.targetInstaller.name}
+                        </p>
+                      )}
                       {r.quotes?.length > 0 && (
                         <p className="text-xs text-accent-dark mt-1 font-medium">
                           {r.quotes.length} devis reçu{r.quotes.length > 1 ? 's' : ''}
                         </p>
                       )}
-                      {/* Pipeline 5 étapes */}
                       <RequestPipeline status={r.status as RequestStatus} />
                     </div>
 
-                    {/* Droite : badge + bouton supprimer */}
+                    {/* Droite : badge + actions */}
                     <div className="flex flex-col items-end gap-2 flex-shrink-0">
-                      <span className={`${STATUS_COLORS[r.status] || 'badge-blue'}`}>
-                        {STATUS_LABELS[r.status as RequestStatus] || r.status}
-                      </span>
+                      {isDirectRequest && r.status === 'SUBMITTED' ? (
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-violet-100 text-violet-700">
+                          Envoyée à l'installateur
+                        </span>
+                      ) : (
+                        <span className={STATUS_COLORS[r.status] || 'badge-blue'}>
+                          {STATUS_LABELS[r.status as RequestStatus] || r.status}
+                        </span>
+                      )}
+
+                      {/* Bouton confirmation réception */}
+                      {isMiseEnService && (
+                        <button
+                          onClick={() => setConfirmTarget(r)}
+                          className="bg-orange-500 hover:bg-orange-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1"
+                        >
+                          <CheckCircle className="w-3.5 h-3.5" />
+                          Confirmer la réception
+                        </button>
+                      )}
+
                       {canDelete && (
                         <button
                           onClick={() => setDeleteTarget(r.id)}

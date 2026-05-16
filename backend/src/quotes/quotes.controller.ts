@@ -19,6 +19,8 @@ export class QuotesController {
     return this.service.create(user.id, dto);
   }
 
+  // ── Routes statiques — doivent être déclarées AVANT :id ──────────────────
+
   @Get('client')
   @ApiOperation({ summary: 'Mes devis reçus (client)' })
   forClient(@CurrentUser() user: any) {
@@ -31,7 +33,6 @@ export class QuotesController {
     return this.service.findForInstaller(user.id);
   }
 
-  // Routes statiques AVANT :id
   @Patch(':id/accept')
   @ApiOperation({ summary: 'Accepter un devis' })
   accept(@Param('id') id: string, @CurrentUser() user: any) {
@@ -44,10 +45,17 @@ export class QuotesController {
     return this.service.updateStatus(id, user.id, QuoteStatus.REFUSED);
   }
 
-  // Détail complet pour installateur (avec infos client)
+  // ── Routes paramétrées ────────────────────────────────────────────────────
+
   @Get('installer/:id')
-  @ApiOperation({ summary: 'Détail d\'un devis avec infos client (installateur)' })
+  @ApiOperation({ summary: "Détail d'un devis avec infos client (installateur)" })
   installerQuoteDetail(@Param('id') id: string, @CurrentUser() user: any) {
     return this.service.findOneForInstaller(id, user.id);
+  }
+
+  @Get(':id')
+  @ApiOperation({ summary: "Détail d'un devis (client)" })
+  clientQuoteDetail(@Param('id') id: string, @CurrentUser() user: any) {
+    return this.service.findOneForClient(id, user.id);
   }
 }
