@@ -42,4 +42,11 @@ export class AdminController {
   requests(@Query('page') page = 1, @Query('limit') limit = 20) {
     return this.service.getAllRequests(+page, +limit);
   }
+  
+
+ // ✅ Ajouter ici
+@Patch('installers/:id/activate')
+@ApiOperation({ summary: 'Réactiver un installateur' })
+activate(@Param('id') id: string) { return this.service.activateInstaller(id); }
+
 }

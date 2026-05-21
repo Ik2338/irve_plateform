@@ -25,23 +25,22 @@ export class QuotesService {
     validUntil.setDate(validUntil.getDate() + 30);
 
     const quote = await this.prisma.quote.create({
-      data: {
-        requestId:    dto.requestId,
-        installerId:  installer.id,
-        userId:       request.userId,
-        amount:       dto.laborCost + dto.materialCost,
-        laborCost:    dto.laborCost,
-        materialCost: dto.materialCost,
-        vatRate:      dto.vatRate ?? 20,
-        notes:        dto.notes,
-        validUntil,
-        status: QuoteStatus.SENT,
-      },
-      include: {
-        request:   true,
-        installer: { select: { companyName: true, city: true } },
-      },
-    });
+  data: {
+    request:   { connect: { id: dto.requestId } },
+    installer: { connect: { id: installer.id } },
+    user:      { connect: { id: request.userId } },
+    amount:    dto.laborCost,
+    laborCost: dto.laborCost,
+    vatRate:   dto.vatRate ?? 20,
+    notes:     dto.notes,
+    validUntil,
+    status:    QuoteStatus.SENT,
+  } as any,
+  include: {
+    request:   true,
+    installer: { select: { companyName: true, city: true } },
+  },
+});
 
     await this.prisma.installationRequest.update({
       where: { id: dto.requestId },

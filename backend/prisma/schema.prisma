@@ -144,7 +144,6 @@ model Quote {
   amount       Float
   vatRate      Float               @default(20)
   laborCost    Float
-  materialCost Float
   notes        String?
   validUntil   DateTime
   pdfUrl       String?

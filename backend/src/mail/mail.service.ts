@@ -76,7 +76,7 @@ export class MailService {
     client:    any;
   }) {
     const { request, installer, client } = params;
-    const appUrl      = process.env.FRONTEND_URL || 'http://localhost:3000';
+    const appUrl      = process.env.FRONTEND_URL || 'http://localhost';
     const respondUrl  = `${appUrl}/dashboard/installer/requests/${request.id}`;
     const acceptUrl   = `${appUrl}/dashboard/installer/requests/${request.id}?action=accept`;
     const declineUrl  = `${appUrl}/dashboard/installer/requests/${request.id}?action=decline`;
@@ -188,7 +188,7 @@ export class MailService {
     client:    any;
   }) {
     const { quote, request, installer, client } = params;
-    const appUrl     = process.env.FRONTEND_URL || 'http://localhost:3000';
+    const appUrl     = process.env.FRONTEND_URL || 'http://localhost';
     const quoteUrl = `${appUrl}/dashboard/installer/quotes/${quote.id}`;
     const clientName = [client?.firstName, client?.lastName].filter(Boolean).join(' ') || 'Client';
     const instName   = installer?.companyName || "Un installateur";
@@ -275,7 +275,7 @@ export class MailService {
   }) {
     const { request, action } = params;
     const accepted   = action === 'ACCEPT';
-    const appUrl     = process.env.FRONTEND_URL || 'http://localhost:3000';
+    const appUrl     = process.env.FRONTEND_URL || 'http://localhost';
     const clientName = [request.user?.firstName, request.user?.lastName].filter(Boolean).join(' ') || 'Client';
     const instName   = request.installer?.companyName || "l'installateur";
 
@@ -344,7 +344,7 @@ export class MailService {
       message:     string;
     },
   ) {
-    const appUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    const appUrl = process.env.FRONTEND_URL || 'http://localhost';
 
     const html = `
       <div style="font-family:system-ui,sans-serif;max-width:600px;margin:0 auto;background:#ffffff;">
@@ -401,7 +401,7 @@ export class MailService {
 
   // ── Email vérification de compte ──────────────────────────────────────────
   async sendVerificationEmail(to: string, firstName: string, token: string) {
-    const appUrl    = process.env.FRONTEND_URL || 'http://localhost:3000';
+    const appUrl    = process.env.FRONTEND_URL || 'http://localhost';
     const verifyUrl = `${appUrl}/auth/verify-email?token=${token}`;
 
     const html = `
@@ -439,7 +439,7 @@ export class MailService {
 
   // ── Email réinitialisation de mot de passe ────────────────────────────────
   async sendPasswordResetEmail(to: string, firstName: string, token: string) {
-    const appUrl   = process.env.FRONTEND_URL || 'http://localhost:3000';
+    const appUrl   = process.env.FRONTEND_URL || 'http://localhost';
     const resetUrl = `${appUrl}/auth/reset-password?token=${token}`;
 
     const html = `

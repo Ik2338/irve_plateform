@@ -32,6 +32,11 @@ api.interceptors.response.use(
       localStorage.removeItem('irve_user');
       window.location.href = '/auth/login';
     }
+
+    if (err.response?.status === 403 && !isAuthRoute && typeof window !== 'undefined') {
+      const currentUrl = window.location.pathname + window.location.search;
+      window.location.href = `/auth/login?redirect=${encodeURIComponent(currentUrl)}`;
+    }
     return Promise.reject(err);
   },
 );
@@ -130,13 +135,14 @@ export const adminApi = {
   requests:            (page = 1)   => api.get('/admin/requests',   { params: { page } }),
   verifyInstaller:     (id: string) => api.patch(`/admin/installers/${id}/verify`),
   deactivateInstaller: (id: string) => api.patch(`/admin/installers/${id}/deactivate`),
+  activateInstaller: (id: string) => api.patch(`/admin/installers/${id}/activate`),
 };
 
 export const reviewsApi = {
   create: (data: {
     requestId:   string;
     installerId: string;
-    score:       number;
+    rating:      number;
     comment?:    string;
   }) => api.post('/reviews', data),
 

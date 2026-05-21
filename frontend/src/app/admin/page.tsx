@@ -21,6 +21,33 @@ interface PaginatedState<T> {
   loading: boolean;
 }
 
+// ✅ Fonction qui compte TOUTES les certifications d'un installateur :
+//    - la table InstallerCertification (certifications IRVE uploadées manuellement)
+//    - le champ qualifelecCertNumber (qualification Qualifelec saisie dans le profil)
+function countCertifications(inst: any): number {
+  const irveTable = inst.certifications?.length ?? 0;
+  const qualifelec = inst.qualifelecCertNumber ? 1 : 0;
+  return irveTable + qualifelec;
+}
+
+// ✅ Résumé lisible des certifications pour l'affichage détaillé
+function certSummary(inst: any): string {
+  const parts: string[] = [];
+
+  if (inst.qualifelecCertNumber) {
+    const indices = inst.qualifelecIndices?.length
+      ? ` (${inst.qualifelecIndices.join(', ')})`
+      : '';
+    parts.push(`Qualifelec n°${inst.qualifelecCertNumber}${indices}`);
+  }
+
+  if (inst.certifications?.length) {
+    parts.push(`${inst.certifications.length} cert. IRVE`);
+  }
+
+  return parts.join(' · ') || 'Aucune certification';
+}
+
 function usePaginated<T>(fetcher: (page: number) => Promise<any>) {
   const [state, setState] = useState<PaginatedState<T>>({
     data: [], page: 1, total: 0, loading: false,
@@ -84,7 +111,6 @@ export default function AdminPage() {
       if (!raw) { router.replace('/auth/login'); return; }
       const user = JSON.parse(raw);
       if (user.role !== 'ADMIN') {
-        // Redirige vers le bon dashboard selon le rôle
         if (user.role === 'INSTALLER') router.replace('/dashboard/installer');
         else router.replace('/dashboard');
         return;
@@ -116,6 +142,12 @@ export default function AdminPage() {
     installers.reload();
   };
 
+  const activate = async (id: string) => {
+  await adminApi.activateInstaller(id);
+  toast.success('Installateur réactivé !');
+  installers.reload();
+};
+
   const logout = () => { localStorage.clear(); router.push('/'); };
 
   const tabs: { key: Tab; label: string; Icon: any }[] = [
@@ -125,7 +157,6 @@ export default function AdminPage() {
     { key: 'requests', label: 'Demandes', Icon: FileText },
   ];
 
-  // Affiche un spinner pendant la vérification auth ou le chargement des stats
   if (!authChecked || (statsLoading && tab === 'stats')) return (
     <div className="min-h-screen flex items-center justify-center">
       <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full" />
@@ -137,7 +168,6 @@ export default function AdminPage() {
       {/* Navbar */}
       <nav className="bg-white border-b px-4 py-4 flex items-center justify-between shadow-sm">
         <div className="flex items-center gap-3">
-          {/* Logo → retourne sur la page admin, pas sur / */}
           <Link href="/admin" className="flex items-center gap-2 font-bold text-primary">
             <Zap className="w-5 h-5" />IRVE Platform
           </Link>
@@ -211,23 +241,44 @@ export default function AdminPage() {
                             {inst.isVerified
                               ? <span className="badge-green flex items-center gap-0.5"><Shield className="w-3 h-3" />Vérifié</span>
                               : <span className="badge-orange">En attente</span>}
-                            {!inst.isActive && <span className="bg-red-100 text-red-700 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium">Inactif</span>}
+                            {!inst.isActive && (
+                              <span className="bg-red-100 text-red-700 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium">
+                                Inactif
+                              </span>
+                            )}
                           </div>
-                          <div className="text-sm text-gray-500">{inst.user?.firstName} {inst.user?.lastName} · {inst.user?.email}</div>
-                          <div className="text-xs text-gray-400">SIRET: {inst.siret} · {inst.certifications?.length || 0} certification(s)</div>
+                          <div className="text-sm text-gray-500">
+                            {inst.user?.firstName} {inst.user?.lastName} · {inst.user?.email}
+                          </div>
+                          {/* ✅ CORRIGÉ : on utilise countCertifications() et certSummary() */}
+                          <div className="text-xs text-gray-400">
+                            SIRET: {inst.siret} · {countCertifications(inst)} certification(s)
+                          </div>
+                          {/* ✅ NOUVEAU : affichage du détail des certifications */}
+                          {countCertifications(inst) > 0 && (
+                            <div className="text-xs text-green-600 mt-0.5 flex items-center gap-1">
+                              <Shield className="w-3 h-3" />
+                              {certSummary(inst)}
+                            </div>
+                          )}
                         </div>
+                        
                         <div className="flex gap-2">
-                          {!inst.isVerified && (
-                            <button onClick={() => verify(inst.id)} className="btn-primary text-sm flex items-center gap-1">
-                              <CheckCircle className="w-3 h-3" />Valider
-                            </button>
-                          )}
-                          {inst.isActive && (
-                            <button onClick={() => deactivate(inst.id)} className="btn-outline text-sm flex items-center gap-1 text-red-500 border-red-300">
-                              <XCircle className="w-3 h-3" />Désactiver
-                            </button>
-                          )}
-                        </div>
+  {!inst.isVerified && (
+    <button onClick={() => verify(inst.id)} className="btn-primary text-sm flex items-center gap-1">
+      <CheckCircle className="w-3 h-3" />Valider
+    </button>
+  )}
+  {inst.isActive ? (
+    <button onClick={() => deactivate(inst.id)} className="btn-outline text-sm flex items-center gap-1 text-red-500 border-red-300">
+      <XCircle className="w-3 h-3" />Désactiver
+    </button>
+  ) : (
+    <button onClick={() => activate(inst.id)} className="btn-outline text-sm flex items-center gap-1 text-green-600 border-green-300">
+      <CheckCircle className="w-3 h-3" />Activer
+    </button>
+  )}
+</div>
                       </div>
                     ))}
                   </div>
@@ -288,8 +339,12 @@ export default function AdminPage() {
                             <span className="font-medium">{r.projectType} – {r.powerLevel}</span>
                             <span className="badge-blue">{STATUS_LABELS[r.status as any] || r.status}</span>
                           </div>
-                          <div className="text-sm text-gray-500">{r.address}, {r.city} · {r.user?.firstName} {r.user?.lastName}</div>
-                          <div className="text-xs text-gray-400">{r.quotes?.length || 0} devis · {new Date(r.createdAt).toLocaleDateString('fr-FR')}</div>
+                          <div className="text-sm text-gray-500">
+                            {r.address}, {r.city} · {r.user?.firstName} {r.user?.lastName}
+                          </div>
+                          <div className="text-xs text-gray-400">
+                            {r.quotes?.length || 0} devis · {new Date(r.createdAt).toLocaleDateString('fr-FR')}
+                          </div>
                         </div>
                       </div>
                     ))}

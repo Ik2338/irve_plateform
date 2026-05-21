@@ -1,12 +1,9 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service';
-import { CreateInstallerDto } from './dto/create-installer.dto';
 import { SearchInstallersDto } from './dto/search-installers.dto';
 import axios from 'axios';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-// Coordonnées par défaut (Paris) utilisées si le géocodage échoue
 const DEFAULT_COORDS = { lat: 48.8566, lon: 2.3522 };
 
 @Injectable()
@@ -19,7 +16,7 @@ export class InstallersService {
     try {
       coords = await this.geocodeAddress(dto);
     } catch (e) {
-      console.warn('[create] Géocodage ignoré, coordonnées par défaut utilisées:', (e as any).message);
+      console.warn('[create] Géocodage ignoré:', (e as any).message);
     }
 
     await this.prisma.$executeRaw`
@@ -146,35 +143,128 @@ export class InstallersService {
     });
   }
 
-  // ─── Recherche géographique ───────────────────────────────────────────────
+  // ─── Recherche principale ─────────────────────────────────────────────────
   async search(dto: SearchInstallersDto) {
+
+    // ════════════════════════════════════════════════════════════════════════
+    // CAS 1 — Pas d'adresse → lister TOUS les installateurs + filtres optionnels
+    // ════════════════════════════════════════════════════════════════════════
+    if (!dto.address?.trim()) {
+
+      // On construit les conditions WHERE dynamiquement
+      // ✅ Sécurisé : certificationLevel et projectType sont validés
+      //    par @IsEnum() dans le DTO — pas de risque d'injection SQL
+      const conditions: string[] = [`i."isActive" = true`];
+
+      if (dto.certificationLevel) {
+        conditions.push(`c.level = '${dto.certificationLevel}'`);
+      }
+      if (dto.projectType) {
+        conditions.push(`pt."projectType" = '${dto.projectType}'`);
+      }
+
+      const whereClause = conditions.join(' AND ');
+      const limit = dto.limit || 50;
+
+      const installers: any[] = await this.prisma.$queryRawUnsafe(`
+        SELECT
+          i.id,
+          i."companyName",
+          i.city,
+          i."postalCode",
+          i.description,
+          i."isVerified",
+          i."averageRating",
+          i."totalReviews",
+          i."interventionRadius",
+          u.email,
+          u.phone,
+          COALESCE(
+            JSON_AGG(DISTINCT JSONB_BUILD_OBJECT('level', c.level))
+            FILTER (WHERE c.level IS NOT NULL), '[]'
+          ) AS certifications,
+          COALESCE(
+            JSON_AGG(DISTINCT JSONB_BUILD_OBJECT('projectType', pt."projectType"))
+            FILTER (WHERE pt."projectType" IS NOT NULL), '[]'
+          ) AS "projectTypes"
+        FROM installers i
+        JOIN users u ON u.id = i."userId"
+        LEFT JOIN installer_certifications c ON c."installerId" = i.id
+        LEFT JOIN installer_project_types pt ON pt."installerId" = i.id
+        WHERE ${whereClause}
+        GROUP BY i.id, u.email, u.phone
+        ORDER BY i."averageRating" DESC NULLS LAST
+        LIMIT ${limit}
+      `);
+
+      return installers;
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // CAS 2 — Adresse fournie → filtre géographique + filtres optionnels
+    // ════════════════════════════════════════════════════════════════════════
     let coords = DEFAULT_COORDS;
     try {
       coords = await this.geocodeAddress({ address: dto.address });
     } catch (e) {
-      console.warn('[search] Géocodage ignoré, recherche depuis Paris par défaut:', (e as any).message);
+      console.warn('[search] Géocodage échoué, fallback Paris:', (e as any).message);
     }
 
-    const installers: any[] = await this.prisma.$queryRaw`
+    // Même logique de filtres dynamiques pour le CAS 2
+    const conditions: string[] = [
+      `i."isActive" = true`,
+      `ST_DWithin(
+        i.location,
+        ST_SetSRID(ST_MakePoint(${coords.lon}, ${coords.lat}), 4326)::geography,
+        i."interventionRadius" * 1000
+      )`,
+    ];
+
+    if (dto.certificationLevel) {
+      conditions.push(`c.level = '${dto.certificationLevel}'`);
+    }
+    if (dto.projectType) {
+      conditions.push(`pt."projectType" = '${dto.projectType}'`);
+    }
+
+    const whereClause = conditions.join(' AND ');
+    const limit = dto.limit || 20;
+
+    const installers: any[] = await this.prisma.$queryRawUnsafe(`
       SELECT
-        i.id, i."companyName", i.city, i."postalCode", i.description,
-        i."averageRating", i."totalReviews", i."isVerified",
-        u."firstName", u."lastName",
+        i.id,
+        i."companyName",
+        i.city,
+        i."postalCode",
+        i.description,
+        i."isVerified",
+        i."averageRating",
+        i."totalReviews",
+        i."interventionRadius",
+        u.email,
+        u.phone,
         ST_Distance(
           i.location,
           ST_SetSRID(ST_MakePoint(${coords.lon}, ${coords.lat}), 4326)::geography
-        ) / 1000 AS distance_km
+        ) / 1000 AS distance_km,
+        COALESCE(
+          JSON_AGG(DISTINCT JSONB_BUILD_OBJECT('level', c.level))
+          FILTER (WHERE c.level IS NOT NULL), '[]'
+        ) AS certifications,
+        COALESCE(
+          JSON_AGG(DISTINCT JSONB_BUILD_OBJECT('projectType', pt."projectType"))
+          FILTER (WHERE pt."projectType" IS NOT NULL), '[]'
+        ) AS "projectTypes"
       FROM installers i
       JOIN users u ON u.id = i."userId"
-      WHERE i."isActive" = true
-        AND ST_DWithin(
-          i.location,
-          ST_SetSRID(ST_MakePoint(${coords.lon}, ${coords.lat}), 4326)::geography,
-          i."interventionRadius" * 1000
-        )
+      LEFT JOIN installer_certifications c ON c."installerId" = i.id
+      LEFT JOIN installer_project_types pt ON pt."installerId" = i.id
+      WHERE ${whereClause}
+      GROUP BY i.id, u.email, u.phone
       ORDER BY distance_km ASC
-      LIMIT ${dto.limit || 20}
-    `;
+      LIMIT ${limit}
+    `);
+
     return installers;
   }
 
@@ -203,7 +293,7 @@ export class InstallersService {
     });
   }
 
-  // ─── Géocodage API Adresse gouv.fr (avec fallback silencieux) ─────────────
+  // ─── Géocodage API Adresse gouv.fr ───────────────────────────────────────
   async geocodeAddress(dto: {
     address?: string;
     postalCode?: string;
@@ -228,9 +318,7 @@ export class InstallersService {
     };
 
     // Niveau 1 — adresse complète
-    const fullAddress = [dto.address, dto.postalCode, dto.city]
-      .filter(Boolean)
-      .join(', ');
+    const fullAddress = [dto.address, dto.postalCode, dto.city].filter(Boolean).join(', ');
     const result1 = await tryGeocode(fullAddress);
     if (result1) return result1;
 
@@ -246,7 +334,7 @@ export class InstallersService {
       if (result3) return result3;
     }
 
-    // Niveau 4 — fallback silencieux au lieu de lancer une exception
+    // Niveau 4 — fallback Paris
     console.warn(`[Geocode] Fallback Paris pour : "${fullAddress}"`);
     return DEFAULT_COORDS;
   }

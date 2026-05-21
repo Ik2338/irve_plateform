@@ -84,18 +84,29 @@ export function RatingModal({
 
   const submit = async () => {
     if (!score) { toast.error('Choisissez une note'); return; }
+    if (!installerId) {
+      toast.error("Installateur introuvable pour cette demande");
+      return;
+    }
     setLoading(true);
     try {
       await reviewsApi.create({
         requestId: request.id,
         installerId,
-        score,
+        rating: score,
         comment,
       });
+      const dismissed: string[] = JSON.parse(
+        localStorage.getItem('irve_dismissed_ratings') || '[]',
+      );
+      localStorage.setItem(
+        'irve_dismissed_ratings',
+        JSON.stringify(Array.from(new Set([...dismissed, request.id]))),
+      );
       setDone(true);
       setTimeout(onDismiss, 2200);
-    } catch {
-      toast.error("Erreur lors de l'envoi de votre avis");
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || "Erreur lors de l'envoi de votre avis");
     } finally {
       setLoading(false);
     }

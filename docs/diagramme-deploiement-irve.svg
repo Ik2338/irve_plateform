@@ -1,0 +1,137 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1180" height="720" viewBox="0 0 1180 720">
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#34424d"/>
+    </marker>
+    <style>
+      .server { fill: #f8f9f9; stroke: #56626b; stroke-width: 1.5; }
+      .side { fill: #d6d6d6; stroke: #56626b; stroke-width: 1.5; }
+      .top { fill: #ececec; stroke: #56626b; stroke-width: 1.5; }
+      .docker { fill: #f7fbff; stroke: #56626b; stroke-width: 1.7; }
+      .component { fill: #d7fbf5; stroke: #506a70; stroke-width: 1.4; }
+      .inner { fill: #effffb; stroke: #506a70; stroke-width: 1.1; }
+      .port { fill: #d7fbf5; stroke: #506a70; stroke-width: 1.2; }
+      .note { fill: #fff8db; stroke: #a88a1a; stroke-width: 1.2; }
+      .title { font: 700 21px Arial, Helvetica, sans-serif; fill: #0d0f11; }
+      .subtitle { font: 700 14px Arial, Helvetica, sans-serif; fill: #16191c; }
+      .text { font: 600 16px Arial, Helvetica, sans-serif; fill: #101417; }
+      .small { font: 500 13px Arial, Helvetica, sans-serif; fill: #263039; }
+      .label { font: 500 16px Arial, Helvetica, sans-serif; fill: #151b20; }
+      .tech { font: 700 26px Arial, Helvetica, sans-serif; }
+      .line { stroke: #34424d; stroke-width: 1.7; fill: none; marker-end: url(#arrow); }
+    </style>
+  </defs>
+
+  <rect width="1180" height="720" fill="#ffffff"/>
+
+  <!-- Browser node -->
+  <g id="browser-node">
+    <polygon class="top" points="63,60 94,32 365,32 338,60"/>
+    <polygon class="side" points="338,60 365,32 365,246 338,278"/>
+    <rect class="server" x="63" y="60" width="275" height="218" rx="6"/>
+    <text class="subtitle" x="201" y="85" text-anchor="middle">Navigateur Web</text>
+
+    <rect class="component" x="110" y="113" width="194" height="112" rx="5"/>
+    <rect class="port" x="92" y="162" width="36" height="19" rx="5"/>
+    <rect class="port" x="92" y="187" width="36" height="19" rx="5"/>
+    <text class="text" x="207" y="136" text-anchor="middle">Front-End Next.js</text>
+    <text class="tech" x="207" y="176" text-anchor="middle" fill="#000000">Next.js</text>
+    <text class="small" x="207" y="201" text-anchor="middle">TypeScript / Tailwind CSS</text>
+  </g>
+
+  <!-- Docker node -->
+  <g id="docker-node">
+    <polygon class="top" points="438,48 470,24 1087,24 1058,76 466,76"/>
+    <polygon class="side" points="1058,76 1087,24 1087,626 1058,664"/>
+    <rect class="docker" x="438" y="76" width="620" height="588" rx="6"/>
+    <text class="title" x="748" y="105" text-anchor="middle">Docker Node / Docker Host</text>
+    <text class="subtitle" x="748" y="128" text-anchor="middle">docker-compose - reseau bridge irve_net</text>
+
+    <!-- Nginx container -->
+    <rect class="component" x="481" y="164" width="174" height="102" rx="5"/>
+    <rect class="port" x="464" y="191" width="34" height="19" rx="5"/>
+    <rect class="port" x="464" y="229" width="34" height="19" rx="5"/>
+    <text class="text" x="568" y="191" text-anchor="middle">Nginx</text>
+    <text class="small" x="568" y="216" text-anchor="middle">Reverse Proxy</text>
+    <text class="small" x="568" y="239" text-anchor="middle">Conteneur irve_nginx / port 80</text>
+
+    <!-- Backend container -->
+    <rect class="component" x="747" y="158" width="258" height="146" rx="5"/>
+    <rect class="port" x="730" y="184" width="34" height="19" rx="5"/>
+    <rect class="port" x="730" y="268" width="34" height="19" rx="5"/>
+    <text class="text" x="876" y="184" text-anchor="middle">Backend NestJS</text>
+    <text class="tech" x="876" y="221" text-anchor="middle" fill="#e0234e">NestJS</text>
+    <text class="small" x="876" y="246" text-anchor="middle">Conteneur irve_backend / port 3001</text>
+    <rect class="inner" x="788" y="261" width="176" height="29" rx="4"/>
+    <text class="small" x="876" y="281" text-anchor="middle">Prisma ORM integre au backend</text>
+
+    <!-- Database container -->
+    <rect class="component" x="747" y="354" width="258" height="96" rx="5"/>
+    <rect class="port" x="730" y="383" width="34" height="19" rx="5"/>
+    <text class="text" x="876" y="386" text-anchor="middle">PostgreSQL + PostGIS</text>
+    <text class="small" x="876" y="412" text-anchor="middle">Conteneur irve_postgres</text>
+    <text class="small" x="876" y="432" text-anchor="middle">Base de donnees IRVE / port 5432</text>
+
+    <!-- Redis container -->
+    <rect class="component" x="481" y="354" width="174" height="76" rx="5"/>
+    <rect class="port" x="464" y="382" width="34" height="19" rx="5"/>
+    <text class="text" x="568" y="384" text-anchor="middle">Redis</text>
+    <text class="small" x="568" y="409" text-anchor="middle">Cache / port 6379</text>
+
+    <!-- Mailpit container -->
+    <rect class="component" x="481" y="469" width="174" height="82" rx="5"/>
+    <rect class="port" x="464" y="501" width="34" height="19" rx="5"/>
+    <text class="text" x="568" y="501" text-anchor="middle">Mailpit</text>
+    <text class="small" x="568" y="526" text-anchor="middle">SMTP dev 1025</text>
+    <text class="small" x="568" y="544" text-anchor="middle">UI web 8025</text>
+
+    <!-- PgAdmin container -->
+    <rect class="component" x="747" y="508" width="258" height="76" rx="5"/>
+    <rect class="port" x="730" y="536" width="34" height="19" rx="5"/>
+    <text class="text" x="876" y="538" text-anchor="middle">PgAdmin</text>
+    <text class="small" x="876" y="563" text-anchor="middle">Administration BDD / port 5050</text>
+  </g>
+
+  <!-- External production services -->
+  <g id="external-services">
+    <rect class="component" x="73" y="408" width="224" height="72" rx="5"/>
+    <text class="text" x="185" y="437" text-anchor="middle">Service SMTP externe</text>
+    <text class="small" x="185" y="462" text-anchor="middle">Production : Resend / SMTP</text>
+
+    <rect class="component" x="73" y="540" width="224" height="72" rx="5"/>
+    <text class="text" x="185" y="569" text-anchor="middle">API Adresse</text>
+    <text class="small" x="185" y="594" text-anchor="middle">data.gouv.fr / geocodage</text>
+  </g>
+
+  <!-- Note -->
+  <g id="mailpit-note">
+    <rect class="note" x="372" y="614" width="321" height="70" rx="5"/>
+    <text class="small" x="533" y="639" text-anchor="middle">Mailpit est conserve pour l'environnement de developpement.</text>
+    <text class="small" x="533" y="661" text-anchor="middle">En production, il sera remplace par un service SMTP externe.</text>
+  </g>
+
+  <!-- Connections -->
+  <path class="line" d="M365,171 L481,205"/>
+  <text class="label" x="423" y="176" text-anchor="middle">Requetes HTTP</text>
+
+  <path class="line" d="M655,213 L747,213"/>
+  <text class="label" x="701" y="202" text-anchor="middle">/api JSON</text>
+
+  <path class="line" d="M876,304 L876,354"/>
+  <text class="label" x="898" y="333">SQL / Prisma</text>
+
+  <path class="line" d="M747,235 C688,257 616,317 568,354"/>
+  <text class="label" x="637" y="303">Redis URL</text>
+
+  <path class="line" d="M747,256 C661,305 603,404 568,469"/>
+  <text class="label" x="630" y="394">SMTP dev</text>
+
+  <path class="line" d="M876,508 L876,450"/>
+  <text class="label" x="900" y="485">Admin DB</text>
+
+  <path class="line" d="M481,510 C392,498 317,459 297,444"/>
+  <text class="label" x="383" y="486">remplace en prod</text>
+
+  <path class="line" d="M747,228 C548,306 395,552 297,576"/>
+  <text class="label" x="423" y="553">Geocodage</text>
+</svg>

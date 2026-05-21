@@ -1,11 +1,11 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
-  Zap, Search, MapPin, Star, Shield, ChevronRight, ChevronLeft,
+  Zap, Search, MapPin, Star, Shield, ChevronRight,
   List, Map as MapIcon, Award, Phone, Mail, Globe, FileText,
-  Download, CheckCircle, X, SlidersHorizontal, Filter,
+  Download, CheckCircle, X, SlidersHorizontal, Filter, Loader2,
 } from 'lucide-react';
 import { api, installersApi } from '@/lib/api';
 
@@ -21,6 +21,24 @@ const CERT_LABELS: Record<string, string> = {
   IRVE_P3: 'IRVE P3 — Infrastructures collectives',
 };
 const CERT_SHORT: Record<string, string> = { IRVE_P1: 'P1', IRVE_P2: 'P2', IRVE_P3: 'P3' };
+
+// ─── StarRating helper ────────────────────────────────────────────────────────
+function StarRating({ rating, reviews }: { rating: number; reviews?: number }) {
+  return (
+    <div className="flex items-center gap-1">
+      {[1, 2, 3, 4, 5].map(s => (
+        <Star
+          key={s}
+          className={`w-3.5 h-3.5 ${s <= Math.round(rating) ? 'text-yellow-400 fill-yellow-400' : 'text-gray-300'}`}
+        />
+      ))}
+      <span className="text-sm font-medium text-gray-700 ml-0.5">{rating.toFixed(1)}</span>
+      {reviews !== undefined && (
+        <span className="text-xs text-gray-400">({reviews} avis)</span>
+      )}
+    </div>
+  );
+}
 
 // ─── Map Leaflet ──────────────────────────────────────────────────────────────
 function InstallerMap({ results, onSelect }: { results: any[]; onSelect: (inst: any) => void }) {
@@ -49,8 +67,8 @@ function InstallerMap({ results, onSelect }: { results: any[]; onSelect: (inst: 
       const L = (window as any).L;
       if (!mapElRef.current) return;
       const center = results.length > 0 && results[0].lat && results[0].lng
-        ? [results[0].lat, results[0].lng] : [48.8566, 2.3522];
-      const map = L.map(mapElRef.current).setView(center, 10);
+        ? [results[0].lat, results[0].lng] : [46.8566, 2.3522]; // Centre France
+      const map = L.map(mapElRef.current).setView(center, 6);
       mapRef.current = map;
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '© OpenStreetMap contributors',
@@ -64,11 +82,14 @@ function InstallerMap({ results, onSelect }: { results: any[]; onSelect: (inst: 
         const lat = inst.lat ?? inst.latitude ?? null;
         const lng = inst.lng ?? inst.longitude ?? null;
         if (!lat || !lng) return;
+        const stars = inst.averageRating
+          ? `⭐ ${parseFloat(inst.averageRating).toFixed(1)} (${inst.totalReviews} avis)` : '';
         const popup = `
           <div style="min-width:180px;font-family:system-ui">
             <p style="font-weight:700;margin:0 0 4px">${inst.companyName}</p>
             ${inst.isVerified ? '<span style="background:#dcfce7;color:#166534;padding:2px 8px;border-radius:99px;font-size:11px">✓ Vérifié IRVE</span>' : ''}
-            <p style="color:#6b7280;font-size:12px;margin:6px 0">${inst.city} · ${parseFloat(inst.distance_km || 0).toFixed(1)} km</p>
+            ${stars ? `<p style="font-size:12px;margin:4px 0 2px">${stars}</p>` : ''}
+            <p style="color:#6b7280;font-size:12px;margin:4px 0">${inst.city}${inst.distance_km ? ` · ${parseFloat(inst.distance_km).toFixed(1)} km` : ''}</p>
             <button onclick="window.__selectInstaller('${inst.id}')" style="color:#16a34a;font-size:12px;font-weight:600;background:none;border:none;cursor:pointer;padding:0">Voir le profil →</button>
           </div>`;
         L.marker([lat, lng], { icon }).addTo(map).bindPopup(popup);
@@ -94,14 +115,14 @@ function InstallerMap({ results, onSelect }: { results: any[]; onSelect: (inst: 
       <div ref={mapElRef} style={{ width: '100%', height: '100%' }} />
       {results.length === 0 && (
         <div className="absolute inset-0 flex items-center justify-center bg-gray-50">
-          <p className="text-gray-400 text-sm">Lancez une recherche pour voir les installateurs sur la carte</p>
+          <p className="text-gray-400 text-sm">Aucun installateur à afficher sur la carte</p>
         </div>
       )}
     </div>
   );
 }
 
-// ─── Panneau profil inline ─────────────────────────────────────────────────────
+// ─── Panneau profil inline ────────────────────────────────────────────────────
 function InstallerProfile({
   installer, onClose, isLoggedIn,
 }: {
@@ -112,22 +133,7 @@ function InstallerProfile({
 
   const handleDevis = () => {
     if (!isLoggedIn) {
-      sessionStorage.setItem('irve_pending_installer', JSON.stringify({
-        id: installer.id,
-        name: installer.companyName,
-      }));
-      router.push(`/auth/login?redirect=${encodeURIComponent(quoteUrl)}`);
-      return;
-    }
-    router.push(quoteUrl);
-  };
-
-  const goFullDevis = () => {
-    if (!isLoggedIn) {
-      sessionStorage.setItem('irve_pending_installer', JSON.stringify({
-        id: installer.id,
-        name: installer.companyName,
-      }));
+      sessionStorage.setItem('irve_pending_installer', JSON.stringify({ id: installer.id, name: installer.companyName }));
       router.push(`/auth/login?redirect=${encodeURIComponent(quoteUrl)}`);
       return;
     }
@@ -168,25 +174,12 @@ function InstallerProfile({
 
         {/* Contenu scrollable */}
         <div className="overflow-y-auto flex-1 p-4 space-y-4">
-
-          {/* Note */}
           {installer.averageRating && (
-            <div className="flex items-center gap-2">
-              {[1,2,3,4,5].map(s => (
-                <Star key={s} className={`w-4 h-4 ${s <= Math.round(installer.averageRating) ? 'text-yellow-400 fill-yellow-400' : 'text-gray-300'}`} />
-              ))}
-              <span className="text-sm text-gray-600 font-medium">
-                {installer.averageRating.toFixed(1)} <span className="text-gray-400 font-normal">({installer.totalReviews} avis)</span>
-              </span>
-            </div>
+            <StarRating rating={installer.averageRating} reviews={installer.totalReviews} />
           )}
-
-          {/* Description */}
           {installer.description && (
             <p className="text-sm text-gray-600 leading-relaxed">{installer.description}</p>
           )}
-
-          {/* Contact */}
           <div className="bg-gray-50 rounded-xl p-3 space-y-2">
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Contact</p>
             {installer.user?.phone && (
@@ -209,8 +202,6 @@ function InstallerProfile({
               Zone : {installer.interventionRadius} km autour de {installer.city}
             </div>
           </div>
-
-          {/* Certifications */}
           <div>
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 flex items-center gap-1.5">
               <Award className="w-3.5 h-3.5 text-primary" />Certifications IRVE
@@ -229,9 +220,7 @@ function InstallerProfile({
                           {cert.level.replace('IRVE_', '')}
                         </div>
                         <div>
-                          <div className="text-sm font-medium text-gray-800">
-                            {CERT_LABELS[cert.level] || cert.level}
-                          </div>
+                          <div className="text-sm font-medium text-gray-800">{CERT_LABELS[cert.level] || cert.level}</div>
                           <div className="text-xs text-gray-500">N° {cert.certNumber}</div>
                           {cert.isVerified
                             ? <div className="text-xs text-green-700 flex items-center gap-1 mt-0.5">
@@ -253,22 +242,16 @@ function InstallerProfile({
               )
             }
           </div>
-
-          {/* Types de projets */}
           {installer.projectTypes?.length > 0 && (
             <div>
               <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Types de projets</p>
               <div className="flex flex-wrap gap-2">
                 {installer.projectTypes.map((pt: any) => (
-                  <span key={pt.projectType} className="badge-blue">
-                    {PROJ_LABELS[pt.projectType] || pt.projectType}
-                  </span>
+                  <span key={pt.projectType} className="badge-blue">{PROJ_LABELS[pt.projectType] || pt.projectType}</span>
                 ))}
               </div>
             </div>
           )}
-
-          {/* Avis */}
           {installer.reviews?.length > 0 && (
             <div>
               <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
@@ -281,9 +264,7 @@ function InstallerProfile({
                       {[1,2,3,4,5].map(s => (
                         <Star key={s} className={`w-3 h-3 ${s <= r.rating ? 'text-yellow-400 fill-yellow-400' : 'text-gray-300'}`} />
                       ))}
-                      <span className="text-xs text-gray-400 ml-1">
-                        {new Date(r.createdAt).toLocaleDateString('fr-FR')}
-                      </span>
+                      <span className="text-xs text-gray-400 ml-1">{new Date(r.createdAt).toLocaleDateString('fr-FR')}</span>
                     </div>
                     {r.comment && <p className="text-sm text-gray-600">{r.comment}</p>}
                   </div>
@@ -295,21 +276,13 @@ function InstallerProfile({
 
         {/* CTA Footer */}
         <div className="p-4 border-t border-gray-100 bg-gray-50 flex-shrink-0">
-          <div className="flex flex-col sm:flex-row gap-2">
-            <button
-              onClick={goFullDevis}
-              className="btn-outline flex-1 flex items-center justify-center gap-2 text-sm"
-            >
-              <FileText className="w-4 h-4" />Devis détaillé
-            </button>
-            <button
-              onClick={handleDevis}
-              className="btn-primary flex-1 flex items-center justify-center gap-2 text-sm"
-            >
-              <FileText className="w-4 h-4" />
-              {isLoggedIn ? 'Demande rapide' : 'Se connecter pour demander'}
-            </button>
-          </div>
+          <button
+            onClick={handleDevis}
+            className="btn-primary w-full flex items-center justify-center gap-2 text-sm"
+          >
+            <FileText className="w-4 h-4" />
+            {isLoggedIn ? 'Demander un devis' : 'Se connecter pour demander un devis'}
+          </button>
           {!isLoggedIn && (
             <p className="text-xs text-center text-gray-400 mt-2">
               Vous serez redirigé vers la connexion, puis directement vers le devis.
@@ -324,15 +297,16 @@ function InstallerProfile({
 // ─── Page principale ──────────────────────────────────────────────────────────
 export default function SearchPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
 
   const [address,        setAddress]        = useState('');
   const [projectType,    setProjectType]    = useState('');
   const [certification,  setCertification]  = useState('');
   const [radius,         setRadius]         = useState('');
   const [results,        setResults]        = useState<any[]>([]);
+  const [allInstallers,  setAllInstallers]  = useState<any[]>([]);
   const [loading,        setLoading]        = useState(false);
-  const [searched,       setSearched]       = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [hasSearched,    setHasSearched]    = useState(false);
   const [errorMsg,       setErrorMsg]       = useState('');
   const [viewMode,       setViewMode]       = useState<'list' | 'map'>('list');
   const [selectedInst,   setSelectedInst]   = useState<any>(null);
@@ -340,64 +314,96 @@ export default function SearchPage() {
   const [isLoggedIn,     setIsLoggedIn]     = useState(false);
   const [loadingProfile, setLoadingProfile] = useState(false);
 
+  // Vérification session
   useEffect(() => {
     const u = localStorage.getItem('irve_user');
     setIsLoggedIn(!!u);
   }, []);
 
+  // ── Chargement initial : TOUS les installateurs ──────────────────────────
+  useEffect(() => {
+    const fetchAll = async () => {
+      setInitialLoading(true);
+      try {
+        // Appel sans adresse → le backend renvoie tous les installateurs
+        const { data } = await api.get('/installers/search');
+        const list = Array.isArray(data) ? data : (data?.data ?? []);
+        setAllInstallers(list);
+        setResults(list);
+      } catch {
+        // Silencieux : l'utilisateur peut quand même chercher manuellement
+      } finally {
+        setInitialLoading(false);
+      }
+    };
+    fetchAll();
+  }, []);
+
+  // ── Recherche avec adresse + filtres ────────────────────────────────────
   const search = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!address.trim()) return;
     setLoading(true);
     setErrorMsg('');
     setSelectedInst(null);
+    setHasSearched(true);
     try {
-      const params: any = { address };
-      if (projectType)   params.projectType   = projectType;
-      if (certification) params.certification  = certification;
-      if (radius)        params.radius         = radius;
+      const params: any = {};
+      if (address.trim()) params.address = address.trim();
+      if (projectType)    params.projectType  = projectType;
+      if (certification)  params.certification = certification;
+      if (radius)         params.radius        = radius;
+
       const { data } = await api.get('/installers/search', { params });
-      setResults(Array.isArray(data) ? data : []);
-      setSearched(true);
+      setResults(Array.isArray(data) ? data : (data?.data ?? []));
     } catch (err: any) {
       setErrorMsg(`Erreur : ${err?.response?.data?.message || err?.message || 'Erreur réseau'}`);
       setResults([]);
-      setSearched(true);
     } finally {
       setLoading(false);
     }
   };
 
-  // Charger le profil complet de l'installateur au clic
+  // ── Réinitialiser vers la liste complète ─────────────────────────────────
+  const resetSearch = () => {
+    setAddress('');
+    setProjectType('');
+    setCertification('');
+    setRadius('');
+    setResults(allInstallers);
+    setHasSearched(false);
+    setErrorMsg('');
+  };
+
+  // ── Charger le profil complet ────────────────────────────────────────────
   const handleSelectInstaller = async (inst: any) => {
     setLoadingProfile(true);
     try {
       const { data } = await installersApi.get(inst.id);
       setSelectedInst(data);
     } catch {
-      setSelectedInst(inst); // Fallback sur les données partielles
+      setSelectedInst(inst);
     } finally {
       setLoadingProfile(false);
     }
   };
 
-  const activeFiltersCount = [projectType, certification, radius].filter(Boolean).length;
+  const activeFiltersCount = [address, projectType, certification, radius].filter(Boolean).length;
+  const displayedResults   = results;
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Nav — SANS bouton connexion */}
+      {/* Nav */}
       <nav className="bg-white border-b px-4 py-4 flex items-center justify-between">
         <Link href="/" className="flex items-center gap-2 font-bold text-primary">
           <Zap className="w-5 h-5" />IRVE Platform
         </Link>
-        {/* Pas de bouton Connexion ici */}
       </nav>
 
-      {/* Hero search */}
-      <div className="bg-gradient-to-br from-primary-light to-white py-12 px-4">
+      {/* Hero */}
+      <div className="bg-gradient-to-br from-primary-light to-white py-10 px-4">
         <div className="max-w-2xl mx-auto text-center">
-          <h1 className="text-3xl font-bold mb-2">Trouver un installateur IRVE</h1>
-          <p className="text-gray-600 mb-6">Certifiés Qualifelec, vérifiés et près de chez vous</p>
+          <h1 className="text-3xl font-bold mb-2">Installateurs IRVE certifiés</h1>
+          <p className="text-gray-600 mb-6">Vérifiés Qualifelec — filtrez par région, certification ou rayon</p>
 
           <form onSubmit={search} className="space-y-3">
             {/* Barre principale */}
@@ -406,15 +412,27 @@ export default function SearchPage() {
                 className="input flex-1"
                 value={address}
                 onChange={e => setAddress(e.target.value)}
-                placeholder="Votre adresse ou code postal (ex: Paris, 75001...)"
+                placeholder="Adresse ou code postal "
               />
               <button
                 type="submit"
-                disabled={loading || !address.trim()}
+                disabled={loading}
                 className="btn-primary flex items-center gap-2 sm:px-6 disabled:opacity-50"
               >
-                <Search className="w-4 h-4" />{loading ? 'Recherche...' : 'Chercher'}
+                {loading
+                  ? <><Loader2 className="w-4 h-4 animate-spin" />Recherche...</>
+                  : <><Search className="w-4 h-4" />Chercher</>
+                }
               </button>
+              {hasSearched && (
+                <button
+                  type="button"
+                  onClick={resetSearch}
+                  className="btn-outline flex items-center gap-2 text-sm"
+                >
+                  <X className="w-4 h-4" />Réinitialiser
+                </button>
+              )}
             </div>
 
             {/* Toggle filtres */}
@@ -443,46 +461,24 @@ export default function SearchPage() {
                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide flex items-center gap-1.5">
                   <Filter className="w-3.5 h-3.5" />Affiner les résultats
                 </p>
-
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  {/* Type de projet */}
                   <div>
                     <label className="label text-xs">Type de projet</label>
-                    <select
-                      className="input text-sm"
-                      value={projectType}
-                      onChange={e => setProjectType(e.target.value)}
-                    >
+                    <select className="input text-sm" value={projectType} onChange={e => setProjectType(e.target.value)}>
                       <option value="">Tous types</option>
-                      {PROJECT_TYPES.map(t => (
-                        <option key={t} value={t}>{PROJ_LABELS[t]}</option>
-                      ))}
+                      {PROJECT_TYPES.map(t => <option key={t} value={t}>{PROJ_LABELS[t]}</option>)}
                     </select>
                   </div>
-
-                  {/* Certification */}
                   <div>
                     <label className="label text-xs">Certification IRVE</label>
-                    <select
-                      className="input text-sm"
-                      value={certification}
-                      onChange={e => setCertification(e.target.value)}
-                    >
+                    <select className="input text-sm" value={certification} onChange={e => setCertification(e.target.value)}>
                       <option value="">Toutes certifications</option>
-                      {CERT_OPTIONS.map(c => (
-                        <option key={c} value={c}>{CERT_LABELS[c]}</option>
-                      ))}
+                      {CERT_OPTIONS.map(c => <option key={c} value={c}>{CERT_LABELS[c]}</option>)}
                     </select>
                   </div>
-
-                  {/* Rayon */}
                   <div>
                     <label className="label text-xs">Rayon (km)</label>
-                    <select
-                      className="input text-sm"
-                      value={radius}
-                      onChange={e => setRadius(e.target.value)}
-                    >
+                    <select className="input text-sm" value={radius} onChange={e => setRadius(e.target.value)}>
                       <option value="">Toute zone</option>
                       <option value="10">≤ 10 km</option>
                       <option value="25">≤ 25 km</option>
@@ -491,34 +487,30 @@ export default function SearchPage() {
                     </select>
                   </div>
                 </div>
-
                 {/* Badges filtres actifs */}
                 {activeFiltersCount > 0 && (
                   <div className="flex items-center gap-2 flex-wrap">
+                    {address && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-gray-100 text-gray-700 rounded-full text-xs">
+                        📍 {address}<button onClick={() => setAddress('')}><X className="w-3 h-3 ml-0.5" /></button>
+                      </span>
+                    )}
                     {projectType && (
                       <span className="badge-blue flex items-center gap-1">
-                        {PROJ_LABELS[projectType]}
-                        <button onClick={() => setProjectType('')}><X className="w-3 h-3" /></button>
+                        {PROJ_LABELS[projectType]}<button onClick={() => setProjectType('')}><X className="w-3 h-3" /></button>
                       </span>
                     )}
                     {certification && (
                       <span className="badge-green flex items-center gap-1">
-                        {CERT_SHORT[certification]}
-                        <button onClick={() => setCertification('')}><X className="w-3 h-3" /></button>
+                        {CERT_SHORT[certification]}<button onClick={() => setCertification('')}><X className="w-3 h-3" /></button>
                       </span>
                     )}
                     {radius && (
                       <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-gray-100 text-gray-700 rounded-full text-xs">
-                        ≤ {radius} km
-                        <button onClick={() => setRadius('')}><X className="w-3 h-3" /></button>
+                        ≤ {radius} km<button onClick={() => setRadius('')}><X className="w-3 h-3 ml-0.5" /></button>
                       </span>
                     )}
-                    <button
-                      onClick={() => { setProjectType(''); setCertification(''); setRadius(''); }}
-                      className="text-xs text-red-500 hover:underline"
-                    >
-                      Tout effacer
-                    </button>
+                    <button onClick={resetSearch} className="text-xs text-red-500 hover:underline">Tout effacer</button>
                   </div>
                 )}
               </div>
@@ -533,30 +525,33 @@ export default function SearchPage() {
           <div className="card border-red-200 bg-red-50 text-red-700 text-sm mb-4">{errorMsg}</div>
         )}
 
-        {!searched && viewMode === 'list' && (
-          <div className="text-center text-gray-500 py-16">
-            <Search className="w-12 h-12 mx-auto mb-3 text-gray-300" />
-            <p>Entrez votre adresse pour trouver des installateurs certifiés</p>
-            <p className="text-sm mt-1 text-gray-400">Vous pouvez aussi filtrer par certification P1 / P2 / P3 ou par zone géographique</p>
+        {/* Chargement initial */}
+        {initialLoading && (
+          <div className="flex flex-col items-center justify-center py-20 gap-3 text-gray-400">
+            <Loader2 className="w-8 h-8 animate-spin text-primary" />
+            <p className="text-sm">Chargement des installateurs...</p>
           </div>
         )}
 
-        {!searched && viewMode === 'map' && <InstallerMap results={[]} onSelect={handleSelectInstaller} />}
-
-        {searched && results.length === 0 && !errorMsg && (
+        {/* Aucun résultat après recherche */}
+        {!initialLoading && hasSearched && displayedResults.length === 0 && !errorMsg && (
           <div className="text-center text-gray-500 py-16">
             <MapPin className="w-12 h-12 mx-auto mb-3 text-gray-300" />
             <p className="font-medium mb-1">Aucun installateur trouvé dans cette zone</p>
-            <p className="text-sm">Essayez une zone plus large ou modifiez vos filtres.</p>
+            <p className="text-sm mb-4">Essayez une zone plus large ou modifiez vos filtres.</p>
+            <button onClick={resetSearch} className="btn-outline text-sm">Voir tous les installateurs</button>
           </div>
         )}
 
-        {results.length > 0 && (
+        {!initialLoading && displayedResults.length > 0 && (
           <>
             {/* Barre résultats */}
             <div className="flex items-center justify-between mb-4">
               <p className="text-sm text-gray-500">
-                {results.length} installateur{results.length > 1 ? 's' : ''} trouvé{results.length > 1 ? 's' : ''}
+                {hasSearched
+                  ? <>{displayedResults.length} résultat{displayedResults.length > 1 ? 's' : ''} pour votre recherche</>
+                  : <>{displayedResults.length} installateur{displayedResults.length > 1 ? 's' : ''} certifié{displayedResults.length > 1 ? 's' : ''}</>
+                }
                 {activeFiltersCount > 0 && <span className="text-primary ml-1">(filtres actifs)</span>}
               </p>
               <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-xl p-1 shadow-sm">
@@ -577,11 +572,12 @@ export default function SearchPage() {
               </div>
             </div>
 
+            {/* Vue carte */}
             {viewMode === 'map' && (
               <div className="space-y-4">
-                <InstallerMap results={results} onSelect={handleSelectInstaller} />
+                <InstallerMap results={displayedResults} onSelect={handleSelectInstaller} />
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {results.map(inst => (
+                  {displayedResults.map(inst => (
                     <button
                       key={inst.id}
                       onClick={() => handleSelectInstaller(inst)}
@@ -595,7 +591,17 @@ export default function SearchPage() {
                           <p className="font-semibold text-sm truncate group-hover:text-primary">{inst.companyName}</p>
                           {inst.isVerified && <Shield className="w-3 h-3 text-green-600 flex-shrink-0" />}
                         </div>
-                        <p className="text-xs text-gray-500">{inst.city} · {parseFloat(inst.distance_km || 0).toFixed(1)} km</p>
+                        <p className="text-xs text-gray-500">
+                          {inst.city}{inst.distance_km ? ` · ${parseFloat(inst.distance_km).toFixed(1)} km` : ''}
+                        </p>
+                        {inst.averageRating && (
+                          <div className="flex items-center gap-0.5 mt-0.5">
+                            {[1,2,3,4,5].map(s => (
+                              <Star key={s} className={`w-3 h-3 ${s <= Math.round(inst.averageRating) ? 'text-yellow-400 fill-yellow-400' : 'text-gray-300'}`} />
+                            ))}
+                            <span className="text-xs text-gray-600 ml-0.5">{parseFloat(inst.averageRating).toFixed(1)}</span>
+                          </div>
+                        )}
                       </div>
                       <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-primary flex-shrink-0" />
                     </button>
@@ -604,47 +610,65 @@ export default function SearchPage() {
               </div>
             )}
 
+            {/* Vue liste */}
             {viewMode === 'list' && (
               <div className="space-y-4">
-                {results.map(inst => (
+                {displayedResults.map(inst => (
                   <button
                     key={inst.id}
                     onClick={() => handleSelectInstaller(inst)}
                     className="card flex items-start justify-between hover:border-primary/30 hover:shadow-md transition-all group w-full text-left"
                   >
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1 flex-wrap">
-                        <h3 className="font-semibold group-hover:text-primary transition-colors">{inst.companyName}</h3>
-                        {inst.isVerified && (
-                          <span className="badge-green flex items-center gap-0.5 text-xs">
-                            <Shield className="w-3 h-3" />Vérifié
-                          </span>
+                    <div className="flex items-start gap-4 flex-1 min-w-0">
+                      {/* Avatar */}
+                      <div className="w-12 h-12 bg-primary-light rounded-2xl flex items-center justify-center flex-shrink-0">
+                        <span className="text-lg font-black text-primary">{inst.companyName?.[0]}</span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        {/* Nom + badge vérifié */}
+                        <div className="flex items-center gap-2 mb-1 flex-wrap">
+                          <h3 className="font-semibold group-hover:text-primary transition-colors">{inst.companyName}</h3>
+                          {inst.isVerified && (
+                            <span className="badge-green flex items-center gap-0.5 text-xs">
+                              <Shield className="w-3 h-3" />Vérifié
+                            </span>
+                          )}
+                        </div>
+                        {/* Ville + distance */}
+                        <div className="flex items-center gap-1 text-sm text-gray-500 mb-2">
+                          <MapPin className="w-3 h-3" />
+                          {inst.city}
+                          {inst.postalCode && <span className="text-gray-400">({inst.postalCode})</span>}
+                          {inst.distance_km && <span>· à {parseFloat(inst.distance_km).toFixed(1)} km</span>}
+                        </div>
+                        {/* ⭐ Évaluation sur 5 */}
+                        {inst.averageRating ? (
+                          <StarRating rating={parseFloat(inst.averageRating)} reviews={inst.totalReviews} />
+                        ) : (
+                          <div className="flex items-center gap-1">
+                            {[1,2,3,4,5].map(s => (
+                              <Star key={s} className="w-3.5 h-3.5 text-gray-200" />
+                            ))}
+                            <span className="text-xs text-gray-400 ml-0.5">Pas encore d'avis</span>
+                          </div>
+                        )}
+                        {/* Certifications */}
+                        {inst.certifications?.length > 0 && (
+                          <div className="flex gap-1 mt-2 flex-wrap">
+                            {inst.certifications.map((c: any) => (
+                              <span key={c.level} className="badge-blue">IRVE {CERT_SHORT[c.level]}</span>
+                            ))}
+                          </div>
+                        )}
+                        {/* Description courte */}
+                        {inst.description && (
+                          <p className="text-xs text-gray-500 mt-2 line-clamp-2">{inst.description}</p>
                         )}
                       </div>
-                      <div className="flex items-center gap-1 text-sm text-gray-500 mb-2">
-                        <MapPin className="w-3 h-3" />{inst.city} · à {parseFloat(inst.distance_km || 0).toFixed(1)} km
-                      </div>
-                      {inst.averageRating && (
-                        <div className="flex items-center gap-1 text-sm">
-                          <Star className="w-3 h-3 text-yellow-400 fill-yellow-400" />
-                          <span className="font-medium">{Number(inst.averageRating).toFixed(1)}</span>
-                          <span className="text-gray-400">({inst.totalReviews} avis)</span>
-                        </div>
-                      )}
-                      {inst.certifications?.length > 0 && (
-                        <div className="flex gap-1 mt-2">
-                          {inst.certifications.map((c: any) => (
-                            <span key={c.level} className="badge-blue">IRVE {CERT_SHORT[c.level]}</span>
-                          ))}
-                        </div>
-                      )}
-                      {inst.description && (
-                        <p className="text-xs text-gray-500 mt-2 line-clamp-2">{inst.description}</p>
-                      )}
                     </div>
-                    <div className="flex items-center gap-2 ml-2 flex-shrink-0">
+                    <div className="flex items-center gap-2 ml-2 flex-shrink-0 mt-1">
                       <span className="text-xs text-primary font-medium hidden sm:block">Voir le profil</span>
-                      <ChevronRight className="w-5 h-5 text-gray-400 group-hover:text-primary mt-1" />
+                      <ChevronRight className="w-5 h-5 text-gray-400 group-hover:text-primary" />
                     </div>
                   </button>
                 ))}
@@ -658,7 +682,7 @@ export default function SearchPage() {
       {loadingProfile && (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/30 backdrop-blur-sm">
           <div className="bg-white rounded-2xl p-6 flex items-center gap-3 shadow-xl">
-            <span className="animate-spin w-6 h-6 border-4 border-primary border-t-transparent rounded-full" />
+            <Loader2 className="animate-spin w-6 h-6 text-primary" />
             <span className="text-sm font-medium text-gray-700">Chargement du profil...</span>
           </div>
         </div>
