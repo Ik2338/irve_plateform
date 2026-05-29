@@ -8,7 +8,6 @@ import { MailService }       from '../mail/mail.service';
 import { CreateRequestDto }  from './dto/create-request.dto';
 import { RequestStatus }     from '@prisma/client';
 
-// ── DTO réponse installateur ──────────────────────────────────────────────────
 export class RespondToRequestDto {
   action:   'ACCEPT' | 'DECLINE';
   message?: string;
@@ -25,11 +24,9 @@ export class RequestsService {
   ) {}
 
   // ─────────────────────────────────────────────────────────────────────────
-  // CREATE — Créer une demande (standard ou ciblée)
-  // ─────────────────────────────────────────────────────────────────────────
   async create(userId: string, dto: CreateRequestDto) {
 
-    // 1. Géocodage —————————————————————————————————————————————————————————
+    // 1. Géocodage
     let coords: { lat: number; lon: number } | null = null;
 
     try {
@@ -41,7 +38,6 @@ export class RequestsService {
       this.logger.warn('geocodeAddress échoué: ' + err.message);
     }
 
-    // Fallback : Nominatim (international, gratuit)
     if (!coords) {
       try {
         const q   = encodeURIComponent(`${dto.address}, ${dto.postalCode} ${dto.city}`);
@@ -63,9 +59,8 @@ export class RequestsService {
       coords = { lat: 0, lon: 0 };
     }
 
-    // 2. Si demande ciblée, vérifier que l'installateur existe ————————————
+    // 2. Si demande ciblée, vérifier que l'installateur existe
     let targetedInstaller: any = null;
-
     if (dto.targetInstallerId) {
       targetedInstaller = await this.prisma.installer.findUnique({
         where:   { id: dto.targetInstallerId },
@@ -76,13 +71,13 @@ export class RequestsService {
       }
     }
 
-    // 3. Récupérer le client pour l'email ——————————————————————————————————
+    // 3. Récupérer le client pour l'email
     const client = await this.prisma.user.findUnique({
       where:  { id: userId },
       select: { firstName: true, lastName: true, email: true },
     });
 
-    // 4. Insérer la demande et récupérer l'ID généré ————————————————————————
+    // 4. Insérer la demande
     const inserted = await this.prisma.$queryRaw<{ id: string }[]>`
       INSERT INTO "installation_requests" (
         id, "userId", "projectType", "powerLevel", quantity,
@@ -108,33 +103,76 @@ export class RequestsService {
     `;
 
     const newId = inserted[0]?.id;
-    if (!newId) {
-      throw new BadRequestException('Erreur lors de la création de la demande.');
-    }
+    if (!newId) throw new BadRequestException('Erreur lors de la création de la demande.');
 
-    const saved = await this.prisma.installationRequest.findUnique({
-      where: { id: newId },
-    });
+    const saved = await this.prisma.installationRequest.findUnique({ where: { id: newId } });
+    if (!saved) throw new BadRequestException('Demande créée mais introuvable — réessayez.');
 
-    if (!saved) {
-      throw new BadRequestException('Demande créée mais introuvable — réessayez.');
-    }
-
-    // 5. Email à l'installateur ciblé ——————————————————————————————————————
+    // 5a. Demande CIBLÉE → email à l'installateur cible uniquement
     if (targetedInstaller) {
       this.logger.log(
-        `📧 Envoi email demande ciblée → installateur ${targetedInstaller.user.email} (demande ${saved.id})`
+        `📧 Envoi email demande ciblée → ${targetedInstaller.user.email} (demande ${saved.id})`
       );
       this.mailService.sendRequestToInstaller({
-        request:   saved,
-        installer: targetedInstaller,
-        client,
+        request: saved, installer: targetedInstaller, client,
       }).catch(err =>
-        this.logger.error(`❌ Email installateur échoué (demande ${saved.id}): ${err.message}`)
+        this.logger.error(`❌ Email installateur ciblé échoué (${saved.id}): ${err.message}`)
+      );
+    }
+
+    // 5b. Demande ZONE → notifier tous les installateurs dont la zone couvre l'adresse
+    if (!dto.targetInstallerId && coords.lat !== 0 && coords.lon !== 0) {
+      this.notifyZoneInstallers(saved, coords, client).catch(err =>
+        this.logger.error(`❌ notifyZoneInstallers échoué (${saved.id}): ${err.message}`)
       );
     }
 
     return saved;
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Notification asynchrone des installateurs de la zone
+  // ─────────────────────────────────────────────────────────────────────────
+  private async notifyZoneInstallers(
+    request: any,
+    coords:  { lat: number; lon: number },
+    client:  any,
+  ) {
+    // Trouver tous les installateurs actifs/vérifiés dont la zone couvre le point
+    const installers = await this.prisma.$queryRaw<any[]>`
+      SELECT
+        i.id,
+        i."companyName",
+        i."interventionRadius",
+        u.email,
+        u."firstName",
+        u."lastName"
+      FROM "installers" i
+      JOIN "users" u ON u.id = i."userId"
+      WHERE i."isActive"   = true
+        AND i."isVerified" = true
+        AND i.location IS NOT NULL
+        AND ST_DWithin(
+          i.location,
+          ST_SetSRID(ST_MakePoint(${coords.lon}, ${coords.lat}), 4326)::geography,
+          i."interventionRadius" * 1000
+        )
+      LIMIT 50
+    `;
+
+    this.logger.log(
+      `📍 Demande zone ${request.id} (${request.city}) → ${installers.length} installateur(s) dans la zone`
+    );
+
+    for (const installer of installers) {
+      this.mailService.sendZoneRequestNotification({
+        request,
+        installer,
+        client,
+      }).catch(err =>
+        this.logger.error(`❌ Email zone installateur ${installer.email} échoué: ${err.message}`)
+      );
+    }
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -191,8 +229,6 @@ export class RequestsService {
   }
 
   // ─────────────────────────────────────────────────────────────────────────
-  // FIND ONE — Client OU installateur ciblé
-  // ─────────────────────────────────────────────────────────────────────────
   async findOne(id: string, userId: string, installerId?: string) {
     const req = await this.prisma.installationRequest.findUnique({
       where:   { id },
@@ -204,12 +240,8 @@ export class RequestsService {
 
     if (!req) throw new NotFoundException('Demande introuvable');
 
-    // ✅ Client propriétaire de la demande
-    const isOwner = req.userId === userId;
-
-    // ✅ Installateur ciblé — on utilise installerId du JWT directement
-    //    (pas de recherche DB supplémentaire, plus fiable)
-    const isTargetedInstaller = !!installerId && (req as any).targetInstallerId === installerId;
+    const isOwner              = req.userId === userId;
+    const isTargetedInstaller  = !!installerId && (req as any).targetInstallerId === installerId;
 
     if (!isOwner && !isTargetedInstaller) {
       throw new ForbiddenException('Accès non autorisé à cette demande');
@@ -218,8 +250,6 @@ export class RequestsService {
     return req;
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // Demandes ciblées en attente pour un installateur (tableau de bord)
   // ─────────────────────────────────────────────────────────────────────────
   async findPendingForInstaller(installerId: string) {
     return this.prisma.$queryRaw<any[]>`
@@ -239,8 +269,6 @@ export class RequestsService {
     `;
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // Méthodes existantes — inchangées
   // ─────────────────────────────────────────────────────────────────────────
   async findMyRequests(userId: string) {
     return this.prisma.installationRequest.findMany({

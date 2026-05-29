@@ -46,7 +46,7 @@ interface Quote {
   createdAt:    string;
   validUntil?:  string;
   laborCost?:   number;
-  materialCost?: number;
+  // materialCost?: number;
   vatRate?:     number;
   notes?:       string;
   installer?:   QuoteInstaller;
@@ -117,8 +117,8 @@ export default function InstallerQuoteDetailPage() {
 
   if (!quote) return null;
 
-  const totalHT  = (quote.laborCost ?? 0) + (quote.materialCost ?? 0);
-  const tva      = totalHT * ((quote.vatRate ?? 20) / 100);
+  const totalHT  = (quote.laborCost ?? 0) ;
+  const tva      = totalHT * ((quote.vatRate ?? 2) / 100);
   const totalTTC = totalHT + tva;
 
   const statusConfig: Record<string, { label: string; color: string; Icon: any }> = {
@@ -262,7 +262,7 @@ export default function InstallerQuoteDetailPage() {
               { label: 'Installateur',   value: quote.installer?.companyName ?? '—' },
               { label: 'Type de projet', value: PROJ_LABELS[quote.request?.projectType ?? ''] ?? quote.request?.projectType ?? '—' },
               { label: "Main d'œuvre",   value: `${(quote.laborCost ?? 0).toLocaleString('fr-FR', { minimumFractionDigits: 2 })} €` },
-              { label: 'Matériel',       value: `${(quote.materialCost ?? 0).toLocaleString('fr-FR', { minimumFractionDigits: 2 })} €` },
+              // { label: 'Matériel',       value: `${(quote.materialCost ?? 0).toLocaleString('fr-FR', { minimumFractionDigits: 2 })} €` },
               { label: `TVA (${quote.vatRate ?? 20}%)`, value: `${tva.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} €` },
             ].map(row => (
               <div key={row.label} className="py-3 flex justify-between gap-4">

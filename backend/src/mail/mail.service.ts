@@ -1,20 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// MailService — Envoi d'emails transactionnels IRVE
-//
-// Variables .env (déjà configurées) :
-//   MAIL_HOST=localhost
-//   MAIL_PORT=1025
-//   MAIL_SECURE=false
-//   MAIL_FROM='IRVE Platform <noreply@irve-platform.fr>'
-//   FRONTEND_URL=http://localhost:3000
-//   # MAIL_USER et MAIL_PASS → pas d'auth avec Mailpit, laisser commentés
-//
-// UI Mailpit : http://localhost:8025
-// ─────────────────────────────────────────────────────────────────────────────
-
-// Labels lisibles
 const PROJ_LABELS: Record<string, string> = {
   RESIDENTIAL: 'Particulier', COMMERCIAL: 'Entreprise',
   COPROPRIETE: 'Copropriété', HOTEL: 'Hôtel', SYNDIC: 'Syndic',
@@ -28,39 +13,30 @@ export class MailService {
   private readonly logger = new Logger(MailService.name);
   private transporter: any = null;
 
-  // ── Initialisation lazy du transporter nodemailer ──────────────────────────
   private async getTransporter() {
     if (this.transporter) return this.transporter;
     const nodemailer = await import('nodemailer');
-
     const user = process.env.MAIL_USER;
     const pass = process.env.MAIL_PASS;
-
     this.transporter = nodemailer.createTransport({
       host:   process.env.MAIL_HOST   || 'localhost',
       port:   parseInt(process.env.MAIL_PORT || '1025'),
       secure: process.env.MAIL_SECURE === 'true',
-      // Pas d'auth avec Mailpit — activé uniquement si MAIL_USER + MAIL_PASS définis
       ...(user && pass ? { auth: { user, pass } } : {}),
     });
-
     this.logger.log(
       `📬 Transporter initialisé → ${process.env.MAIL_HOST || 'localhost'}:${process.env.MAIL_PORT || '1025'}` +
       (user ? ' (avec auth)' : ' (sans auth — Mailpit)')
     );
-
     return this.transporter;
   }
 
-  // ── Envoi générique ────────────────────────────────────────────────────────
   private async send(to: string, subject: string, html: string) {
     try {
       const transporter = await this.getTransporter();
       await transporter.sendMail({
-        from:    process.env.MAIL_FROM || '"IRVE Platform" <noreply@irve-platform.fr>',
-        to,
-        subject,
-        html,
+        from: process.env.MAIL_FROM || '"IRVE Platform" <noreply@irve-platform.fr>',
+        to, subject, html,
       });
       this.logger.log(`✅ Email envoyé → ${to} | ${subject}`);
     } catch (err: any) {
@@ -76,19 +52,18 @@ export class MailService {
     client:    any;
   }) {
     const { request, installer, client } = params;
-    const appUrl      = process.env.FRONTEND_URL || 'http://localhost';
-    const respondUrl  = `${appUrl}/dashboard/installer/requests/${request.id}`;
-    const acceptUrl   = `${appUrl}/dashboard/installer/requests/${request.id}?action=accept`;
-    const declineUrl  = `${appUrl}/dashboard/installer/requests/${request.id}?action=decline`;
+    const appUrl     = process.env.FRONTEND_URL || 'http://localhost';
+    const respondUrl = `${appUrl}/dashboard/installer/requests/${request.id}`;
+    const acceptUrl  = `${appUrl}/dashboard/installer/requests/${request.id}?action=accept`;
+    const declineUrl = `${appUrl}/dashboard/installer/requests/${request.id}?action=decline`;
 
-    const clientName  = [client?.firstName, client?.lastName].filter(Boolean).join(' ') || 'Un client';
-    const projLabel   = PROJ_LABELS[request.projectType]  || request.projectType;
-    const powerLabel  = POWER_LABELS[request.powerLevel]  || request.powerLevel;
+    const clientName = [client?.firstName, client?.lastName].filter(Boolean).join(' ') || 'Un client';
+    const projLabel  = PROJ_LABELS[request.projectType]  || request.projectType;
+    const powerLabel = POWER_LABELS[request.powerLevel]  || request.powerLevel;
 
     const html = `
       <div style="font-family:system-ui,sans-serif;max-width:600px;margin:0 auto;background:#ffffff;">
 
-        <!-- Header vert -->
         <div style="background:#16a34a;border-radius:16px 16px 0 0;padding:28px 32px;">
           <h1 style="color:#fff;margin:0;font-size:22px;font-weight:700;">
             🔌 Nouvelle demande d'installation IRVE
@@ -98,10 +73,7 @@ export class MailService {
           </p>
         </div>
 
-        <!-- Corps -->
         <div style="padding:28px 32px;background:#f9fafb;border-radius:0 0 16px 16px;">
-
-          <!-- Détails -->
           <div style="background:#fff;border-radius:12px;padding:20px;margin-bottom:20px;border:1px solid #e5e7eb;">
             <h2 style="font-size:15px;color:#111827;margin:0 0 16px;font-weight:600;">Détails de la demande</h2>
             <table style="width:100%;border-collapse:collapse;font-size:13px;">
@@ -134,7 +106,6 @@ export class MailService {
             </table>
           </div>
 
-          <!-- Bouton principal -->
           <div style="text-align:center;margin-bottom:16px;">
             <a href="${respondUrl}"
               style="display:inline-block;background:#16a34a;color:#fff;padding:14px 32px;
@@ -143,7 +114,6 @@ export class MailService {
             </a>
           </div>
 
-          <!-- Boutons accept / decline -->
           <table style="width:100%;border-collapse:collapse;margin-bottom:24px;">
             <tr>
               <td style="padding-right:8px;">
@@ -164,7 +134,6 @@ export class MailService {
             </tr>
           </table>
 
-          <!-- Note confidentialité -->
           <p style="color:#9ca3af;font-size:11px;text-align:center;margin:0;">
             Cette demande vous a été envoyée <strong>directement</strong> car le client a sélectionné votre profil.<br/>
             Elle n'est visible par aucun autre installateur.
@@ -180,6 +149,127 @@ export class MailService {
     );
   }
 
+  // ── Email installateur : nouvelle demande dans sa zone ────────────────────
+  async sendZoneRequestNotification(params: {
+    request:   any;
+    installer: any; // { id, companyName, interventionRadius, email, firstName, lastName }
+    client:    any;
+  }) {
+    const { request, installer } = params;
+    const appUrl     = process.env.FRONTEND_URL || 'http://localhost';
+    // Lien vers le lead (matching) côté installateur
+    const leadUrl    = `${appUrl}/dashboard/installer/leads/${request.id}`;
+    const quoteUrl   = `${appUrl}/dashboard/installer/quotes/new?requestId=${request.id}`;
+
+    const projLabel  = PROJ_LABELS[request.projectType]  || request.projectType;
+    const powerLabel = POWER_LABELS[request.powerLevel]  || request.powerLevel;
+    const instName   = installer.firstName || installer.companyName || 'Installateur';
+
+    const html = `
+      <div style="font-family:system-ui,sans-serif;max-width:600px;margin:0 auto;background:#ffffff;">
+
+        <!-- Header bleu-vert -->
+        <div style="background:linear-gradient(135deg,#16a34a,#0d9488);border-radius:16px 16px 0 0;padding:28px 32px;">
+          <h1 style="color:#fff;margin:0;font-size:22px;font-weight:700;">
+            📍 Nouvelle demande dans votre zone
+          </h1>
+          <p style="color:rgba(255,255,255,0.85);margin:8px 0 0;font-size:14px;">
+            Bonjour ${instName}, une demande d'installation IRVE vient d'être déposée près de chez vous.
+          </p>
+        </div>
+
+        <div style="padding:28px 32px;background:#f9fafb;border-radius:0 0 16px 16px;">
+
+          <!-- Bandeau zone -->
+          <div style="background:#ecfdf5;border:1px solid #bbf7d0;border-radius:10px;
+            padding:12px 16px;margin-bottom:20px;display:flex;align-items:center;gap:8px;">
+            <span style="font-size:20px;">📍</span>
+            <span style="color:#15803d;font-size:13px;font-weight:600;">
+              À ${request.city} — dans votre rayon d'intervention de ${installer.interventionRadius} km
+            </span>
+          </div>
+
+          <!-- Détails -->
+          <div style="background:#fff;border-radius:12px;padding:20px;margin-bottom:20px;border:1px solid #e5e7eb;">
+            <h2 style="font-size:15px;color:#111827;margin:0 0 16px;font-weight:600;">Détails de la demande</h2>
+            <table style="width:100%;border-collapse:collapse;font-size:13px;">
+              <tr>
+                <td style="color:#6b7280;padding:6px 0;width:150px;">Type de projet</td>
+                <td style="color:#111827;font-weight:600;padding:6px 0;">${projLabel}</td>
+              </tr>
+              <tr style="background:#f9fafb;">
+                <td style="color:#6b7280;padding:6px 4px;">Puissance souhaitée</td>
+                <td style="color:#111827;font-weight:600;padding:6px 4px;">${request.powerLevel} — ${powerLabel}</td>
+              </tr>
+              <tr>
+                <td style="color:#6b7280;padding:6px 0;">Nb de bornes</td>
+                <td style="color:#111827;font-weight:600;padding:6px 0;">${request.quantity || 1} point(s) de charge</td>
+              </tr>
+              <tr style="background:#f9fafb;">
+                <td style="color:#6b7280;padding:6px 4px;">Lieu</td>
+                <td style="color:#111827;font-weight:600;padding:6px 4px;">${request.city} (${request.postalCode})</td>
+              </tr>
+              ${request.urgency && request.urgency !== 'normal' ? `
+              <tr>
+                <td style="color:#6b7280;padding:6px 0;">Urgence</td>
+                <td style="color:#d97706;font-weight:600;padding:6px 0;">
+                  ${request.urgency === 'urgent' ? '⚡ Urgent' : '🕐 Flexible'}
+                </td>
+              </tr>` : ''}
+              ${request.hasExistingPanel ? `
+              <tr style="background:#f9fafb;">
+                <td style="color:#6b7280;padding:6px 4px;">Tableau élec.</td>
+                <td style="color:#16a34a;font-weight:600;padding:6px 4px;">✓ Disponible sur site</td>
+              </tr>` : ''}
+            </table>
+            ${request.description ? `
+            <div style="margin-top:12px;padding-top:12px;border-top:1px solid #e5e7eb;">
+              <p style="color:#6b7280;font-size:12px;margin:0 0 4px;font-weight:600;
+                text-transform:uppercase;letter-spacing:0.05em;">Remarques client</p>
+              <p style="color:#374151;font-size:13px;margin:0;font-style:italic;">"${request.description}"</p>
+            </div>` : ''}
+          </div>
+
+          <!-- CTA principal -->
+          <div style="text-align:center;margin-bottom:12px;">
+            <a href="${quoteUrl}"
+              style="display:inline-block;background:#16a34a;color:#fff;padding:14px 36px;
+                border-radius:12px;text-decoration:none;font-weight:700;font-size:15px;">
+              Envoyer un devis →
+            </a>
+          </div>
+          <div style="text-align:center;margin-bottom:24px;">
+            <a href="${leadUrl}"
+              style="display:inline-block;color:#16a34a;font-size:13px;font-weight:600;
+                text-decoration:underline;">
+              Voir les détails complets
+            </a>
+          </div>
+
+          <!-- Note compétition -->
+          <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:12px 16px;margin-bottom:0;">
+            <p style="color:#92400e;font-size:12px;margin:0;line-height:1.6;">
+              ⚡ <strong>Cette demande est visible par d'autres installateurs de votre zone.</strong><br/>
+              Le client peut recevoir plusieurs devis et choisira celui qui lui convient le mieux.
+              Répondez rapidement pour maximiser vos chances !
+            </p>
+          </div>
+
+          <p style="color:#9ca3af;font-size:11px;text-align:center;margin:20px 0 0;">
+            IRVE Platform — Trouvez des clients certifiés près de chez vous.<br/>
+            <a href="${appUrl}/dashboard/installer" style="color:#9ca3af;">Gérer mes préférences de notification</a>
+          </p>
+        </div>
+      </div>
+    `;
+
+    await this.send(
+      installer.email,
+      `📍 Nouvelle demande IRVE dans votre zone — ${request.city}`,
+      html,
+    );
+  }
+
   // ── Email client : nouveau devis reçu ─────────────────────────────────────
   async sendQuoteNotificationToClient(params: {
     quote:     any;
@@ -189,9 +279,9 @@ export class MailService {
   }) {
     const { quote, request, installer, client } = params;
     const appUrl     = process.env.FRONTEND_URL || 'http://localhost';
-    const quoteUrl = `${appUrl}/dashboard/installer/quotes/${quote.id}`;
+    const quoteUrl   = `${appUrl}/dashboard`;
     const clientName = [client?.firstName, client?.lastName].filter(Boolean).join(' ') || 'Client';
-    const instName   = installer?.companyName || "Un installateur";
+    const instName   = installer?.companyName || 'Un installateur';
     const projLabel  = PROJ_LABELS[request?.projectType] || request?.projectType || '';
     const totalTTC   = (quote.amount * (1 + (quote.vatRate ?? 20) / 100)).toFixed(2);
 
@@ -200,7 +290,7 @@ export class MailService {
 
         <div style="background:#16a34a;border-radius:16px 16px 0 0;padding:28px 32px;">
           <h1 style="color:#fff;margin:0;font-size:22px;font-weight:700;">
-            📋 Vous avez reçu un devis !
+            📋 Vous avez reçu un nouveau devis !
           </h1>
           <p style="color:rgba(255,255,255,0.85);margin:8px 0 0;font-size:14px;">
             ${instName} a répondu à votre demande d'installation IRVE.
@@ -223,16 +313,12 @@ export class MailService {
                 <td style="color:#111827;font-weight:600;padding:6px 4px;">${projLabel}</td>
               </tr>` : ''}
               <tr>
-                <td style="color:#6b7280;padding:6px 0;">Main d'œuvre</td>
+                <td style="color:#6b7280;padding:6px 0;">Main d'œuvre HT</td>
                 <td style="color:#111827;font-weight:600;padding:6px 0;">${quote.laborCost?.toFixed(2)} €</td>
               </tr>
               <tr style="background:#f9fafb;">
-                <td style="color:#6b7280;padding:6px 4px;">Matériel</td>
-                <td style="color:#111827;font-weight:600;padding:6px 4px;">${quote.materialCost?.toFixed(2)} €</td>
-              </tr>
-              <tr>
-                <td style="color:#6b7280;padding:6px 0;">TVA (${quote.vatRate ?? 20}%)</td>
-                <td style="color:#111827;font-weight:600;padding:6px 0;">${((quote.amount * (quote.vatRate ?? 20)) / 100).toFixed(2)} €</td>
+                <td style="color:#6b7280;padding:6px 4px;">TVA (${quote.vatRate ?? 20}%)</td>
+                <td style="color:#111827;font-weight:600;padding:6px 4px;">${((quote.amount * (quote.vatRate ?? 20)) / 100).toFixed(2)} €</td>
               </tr>
               <tr style="border-top:2px solid #e5e7eb;">
                 <td style="color:#111827;padding:10px 0 6px;font-weight:700;font-size:15px;">Total TTC</td>
@@ -241,16 +327,26 @@ export class MailService {
             </table>
             ${quote.notes ? `
             <div style="margin-top:12px;padding-top:12px;border-top:1px solid #e5e7eb;">
-              <p style="color:#6b7280;font-size:12px;margin:0 0 4px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;">Note de l'installateur</p>
+              <p style="color:#6b7280;font-size:12px;margin:0 0 4px;font-weight:600;
+                text-transform:uppercase;letter-spacing:0.05em;">Note de l'installateur</p>
               <p style="color:#374151;font-size:13px;margin:0;font-style:italic;">"${quote.notes}"</p>
             </div>` : ''}
+          </div>
+
+          <!-- Info : plusieurs devis possibles -->
+          <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;
+            padding:12px 16px;margin-bottom:20px;">
+            <p style="color:#1e40af;font-size:12px;margin:0;line-height:1.6;">
+              💡 <strong>Vous pouvez recevoir plusieurs devis</strong> de différents installateurs de votre zone.<br/>
+              Comparez-les depuis votre tableau de bord et acceptez celui qui vous convient.
+            </p>
           </div>
 
           <div style="text-align:center;margin-bottom:16px;">
             <a href="${quoteUrl}"
               style="display:inline-block;background:#16a34a;color:#fff;padding:14px 32px;
                 border-radius:12px;text-decoration:none;font-weight:700;font-size:15px;">
-              Consulter et répondre au devis →
+              Voir mes devis et comparer →
             </a>
           </div>
 
@@ -296,7 +392,8 @@ export class MailService {
 
           ${request.installerNote ? `
           <div style="background:#fff;border-radius:12px;padding:16px;margin-bottom:20px;border:1px solid #e5e7eb;">
-            <p style="color:#6b7280;font-size:12px;margin:0 0 6px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;">
+            <p style="color:#6b7280;font-size:12px;margin:0 0 6px;font-weight:600;
+              text-transform:uppercase;letter-spacing:0.05em;">
               Message de ${instName}
             </p>
             <p style="color:#111827;font-size:14px;margin:0;font-style:italic;">"${request.installerNote}"</p>

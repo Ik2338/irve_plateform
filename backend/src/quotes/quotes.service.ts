@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ForbiddenException, Logger } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, BadRequestException, Logger } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { MailService }   from '../mail/mail.service';
 import { CreateQuoteDto } from './dto/create-quote.dto';
@@ -21,6 +21,19 @@ export class QuotesService {
     const request = await this.prisma.installationRequest.findUnique({ where: { id: dto.requestId } });
     if (!request) throw new NotFoundException('Demande introuvable');
 
+    // Bloquer uniquement si le client a déjà accepté un devis
+    if (request.status === 'QUOTE_ACCEPTED' || request.status === 'IN_PROGRESS' || request.status === 'COMPLETED') {
+      throw new BadRequestException('Cette demande ne peut plus recevoir de devis — elle est déjà traitée.');
+    }
+
+    // Empêcher un même installateur d'envoyer deux devis pour la même demande
+    const existing = await this.prisma.quote.findFirst({
+      where: { requestId: dto.requestId, installerId: installer.id, status: { not: QuoteStatus.REFUSED } },
+    });
+    if (existing) {
+      throw new BadRequestException('Vous avez déjà envoyé un devis pour cette demande.');
+    }
+
     const validUntil = new Date();
     validUntil.setDate(validUntil.getDate() + 30);
 
@@ -28,36 +41,36 @@ export class QuotesService {
   data: {
     request:   { connect: { id: dto.requestId } },
     installer: { connect: { id: installer.id } },
-    user:      { connect: { id: request.userId } },
+    sentBy:    { connect: { id: request.userId } },   // ← was "user:", now "sentBy:"
     amount:    dto.laborCost,
     laborCost: dto.laborCost,
     vatRate:   dto.vatRate ?? 20,
     notes:     dto.notes,
     validUntil,
     status:    QuoteStatus.SENT,
-  } as any,
-  include: {
-    request:   true,
-    installer: { select: { companyName: true, city: true } },
   },
-});
-
-    await this.prisma.installationRequest.update({
-      where: { id: dto.requestId },
-      data:  { status: 'QUOTE_SENT' },
+      include: {
+        request:   true,
+        installer: { select: { companyName: true, city: true } },
+      },
     });
 
-    // Fire-and-forget : ne bloque pas la réponse HTTP
+    // Passer le statut de la demande à QUOTE_SENT (seulement si ce n'est pas déjà plus avancé)
+    if (request.status === 'SUBMITTED' || request.status === 'MATCHED') {
+      await this.prisma.installationRequest.update({
+        where: { id: dto.requestId },
+        data:  { status: 'QUOTE_SENT' },
+      });
+    }
+
+    // Email au client — fire-and-forget
     this.prisma.user.findUnique({
       where:  { id: request.userId },
       select: { firstName: true, lastName: true, email: true },
     }).then(client => {
       if (!client) return;
       this.mailService.sendQuoteNotificationToClient({
-        quote,
-        request,
-        installer,
-        client,
+        quote, request, installer, client,
       }).catch(err => this.logger.error('Email devis client échoué: ' + err.message));
     }).catch(err => this.logger.error('Récupération client échouée: ' + err.message));
 
@@ -70,16 +83,45 @@ export class QuotesService {
     if (!quote) throw new NotFoundException('Devis introuvable');
     if (quote.userId !== userId) throw new ForbiddenException();
 
+    // Vérifier que le devis est encore en attente avant d'accepter/refuser
+    if (quote.status !== QuoteStatus.SENT) {
+      throw new BadRequestException('Ce devis a déjà été traité.');
+    }
+
     const updated = await this.prisma.quote.update({
       where: { id },
       data:  { status },
     });
 
     if (status === QuoteStatus.ACCEPTED) {
+      // Mettre la demande en QUOTE_ACCEPTED
       await this.prisma.installationRequest.update({
         where: { id: quote.requestId },
         data:  { status: 'QUOTE_ACCEPTED' },
       });
+
+      // Refuser automatiquement tous les autres devis SENT de la même demande
+      const otherQuotes = await this.prisma.quote.findMany({
+        where: {
+          requestId: quote.requestId,
+          id:        { not: id },
+          status:    QuoteStatus.SENT,
+        },
+      });
+
+      if (otherQuotes.length > 0) {
+        await this.prisma.quote.updateMany({
+          where: {
+            requestId: quote.requestId,
+            id:        { not: id },
+            status:    QuoteStatus.SENT,
+          },
+          data: { status: QuoteStatus.REFUSED },
+        });
+        this.logger.log(
+          `🚫 ${otherQuotes.length} autre(s) devis automatiquement refusé(s) pour la demande ${quote.requestId}`
+        );
+      }
     }
 
     return updated;
@@ -114,7 +156,6 @@ export class QuotesService {
   }
 
   // ─────────────────────────────────────────────────────────────────────────
-  // Détail complet d'un devis avec infos client (pour l'installateur)
   async findOneForInstaller(quoteId: string, userId: string) {
     const installer = await this.prisma.installer.findUnique({ where: { userId } });
     if (!installer) throw new ForbiddenException('Profil installateur requis');
@@ -126,11 +167,8 @@ export class QuotesService {
           include: {
             user: {
               select: {
-                firstName: true,
-                lastName:  true,
-                email:     true,
-                phone:     true,
-                createdAt: true,
+                firstName: true, lastName: true,
+                email: true, phone: true, createdAt: true,
               },
             },
           },
@@ -146,7 +184,6 @@ export class QuotesService {
   }
 
   // ─────────────────────────────────────────────────────────────────────────
-  // Détail d'un devis pour le client
   async findOneForClient(quoteId: string, userId: string) {
     const quote = await this.prisma.quote.findUnique({
       where: { id: quoteId },
