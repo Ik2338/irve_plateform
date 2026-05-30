@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -88,7 +88,7 @@ function Badge({ text, colorClass }: { text: string; colorClass: string }) {
 }
 
 /* ─── Main Page ───────────────────────────────────────────────────────────── */
-export default function InstallerRequestDetailPage() {
+function InstallerRequestDetailPageContent() {
   const params       = useParams();
   const id           = typeof params?.id === 'string' ? params.id : undefined;
   const searchParams = useSearchParams();
@@ -496,5 +496,13 @@ export default function InstallerRequestDetailPage() {
 
       </div>
     </div>
+  );
+}
+
+export default function InstallerRequestDetailPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-gray-50" />}>
+      <InstallerRequestDetailPageContent />
+    </Suspense>
   );
 }

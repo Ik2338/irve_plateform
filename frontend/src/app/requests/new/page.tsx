@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { Suspense, useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -52,7 +52,7 @@ const INITIAL: FormData = {
   parkingSpots: 1, hasExistingPanel: false, description: '',
 };
 
-export default function NewRequestPage() {
+function NewRequestPageContent() {
   const router      = useRouter();
   const searchParams = useSearchParams();
   const [step, setStep]     = useState(1);
@@ -417,5 +417,13 @@ export default function NewRequestPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function NewRequestPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-gray-50" />}>
+      <NewRequestPageContent />
+    </Suspense>
   );
 }

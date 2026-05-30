@@ -1,13 +1,13 @@
 'use client';
 // app/auth/login/page.tsx
-import { useState, useEffect } from 'react';
+import { Suspense, useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Zap, Mail, Lock, AlertCircle, Eye, EyeOff, MailOpen, Loader2, ArrowLeft } from 'lucide-react';
 import { authApi } from '@/lib/api';
 import toast from 'react-hot-toast';
 
-export default function LoginPage() {
+function LoginPageContent() {
   const router       = useRouter();
   const searchParams = useSearchParams();
   const redirect     = searchParams.get('redirect') || null;
@@ -320,5 +320,13 @@ export default function LoginPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-gradient-to-br from-[#e8f0fe] via-white to-[#f0f4f8]" />}>
+      <LoginPageContent />
+    </Suspense>
   );
 }

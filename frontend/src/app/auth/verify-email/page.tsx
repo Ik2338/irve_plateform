@@ -1,6 +1,6 @@
 'use client';
 // src/app/auth/verify-email/page.tsx
-import { useEffect, useState, useRef } from 'react';
+import { Suspense, useEffect, useState, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Zap, CheckCircle, XCircle, Loader2, MailOpen, RefreshCw } from 'lucide-react';
@@ -9,7 +9,7 @@ import toast from 'react-hot-toast';
 
 type Status = 'idle' | 'loading' | 'success' | 'error' | 'expired';
 
-export default function VerifyEmailPage() {
+function VerifyEmailPageContent() {
   const searchParams = useSearchParams();
   const router       = useRouter();
   const token        = searchParams.get('token');
@@ -141,6 +141,14 @@ export default function VerifyEmailPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function VerifyEmailPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-gray-50" />}>
+      <VerifyEmailPageContent />
+    </Suspense>
   );
 }
 

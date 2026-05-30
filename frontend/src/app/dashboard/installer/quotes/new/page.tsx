@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -39,7 +39,7 @@ const POWER_LABELS: Record<string, string> = {
 
 const VAT_RATE = 20;
 
-export default function NewQuotePage() {
+function NewQuotePageContent() {
   const searchParams = useSearchParams();
   const router       = useRouter();
 
@@ -317,5 +317,13 @@ export default function NewQuotePage() {
 
       </div>
     </div>
+  );
+}
+
+export default function NewQuotePage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-gray-50" />}>
+      <NewQuotePageContent />
+    </Suspense>
   );
 }

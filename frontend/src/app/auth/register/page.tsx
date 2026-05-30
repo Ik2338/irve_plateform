@@ -1,6 +1,6 @@
 'use client';
 // app/auth/register/page.tsx
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
@@ -19,7 +19,7 @@ const IS_DEV =
   process.env.NODE_ENV !== 'production' ||
   process.env.NEXT_PUBLIC_QUALIFELEC_DEV_MODE === 'true';
 
-export default function RegisterPage() {
+function RegisterPageContent() {
   const router = useRouter();
   const params = useSearchParams();
   const defaultRole = params.get('role') === 'INSTALLER' ? 'INSTALLER' : 'CLIENT';
@@ -393,5 +393,13 @@ export default function RegisterPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function RegisterPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-gradient-to-br from-[#e8f0fe] via-white to-[#f0f4f8]" />}>
+      <RegisterPageContent />
+    </Suspense>
   );
 }
