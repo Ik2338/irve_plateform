@@ -6,7 +6,8 @@ import { PrismaService }     from '../common/prisma/prisma.service';
 import { InstallersService } from '../installers/installers.service';
 import { MailService }       from '../mail/mail.service';
 import { CreateRequestDto }  from './dto/create-request.dto';
-import { RequestStatus }     from '@prisma/client';
+import { ConversationContext, NotificationType, RequestStatus } from '@prisma/client';
+import { MessagingService }  from '../messaging/messaging.service';
 
 export class RespondToRequestDto {
   action:   'ACCEPT' | 'DECLINE';
@@ -21,6 +22,7 @@ export class RequestsService {
     private prisma:            PrismaService,
     private installersService: InstallersService,
     private mailService:       MailService,
+    private messagingService:  MessagingService,
   ) {}
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -64,7 +66,7 @@ export class RequestsService {
     if (dto.targetInstallerId) {
       targetedInstaller = await this.prisma.installer.findUnique({
         where:   { id: dto.targetInstallerId },
-        include: { user: { select: { email: true, firstName: true, lastName: true } } },
+        include: { user: { select: { id: true, email: true, firstName: true, lastName: true } } },
       });
       if (!targetedInstaller) {
         throw new NotFoundException(`Installateur introuvable : ${dto.targetInstallerId}`);
@@ -78,6 +80,9 @@ export class RequestsService {
     });
 
     // 4. Insérer la demande
+    const mediaAttachments = dto.mediaAttachments ?? [];
+    const desiredInstallDate = dto.desiredInstallDate ? new Date(dto.desiredInstallDate) : null;
+
     const inserted = await this.prisma.$queryRaw<{ id: string }[]>`
       INSERT INTO "installation_requests" (
         id, "userId", "projectType", "powerLevel", quantity,
@@ -85,7 +90,10 @@ export class RequestsService {
         "hasExistingPanel", urgency,
         connectors, "parkingType", "parkingAccess", "parkingSpots",
         "targetInstallerId", "isTargeted",
-        source, status, "createdAt", "updatedAt"
+        source, "contactPreference", "desiredInstallDate", "indicativeBudget",
+        "evModel", "panelDistanceMeters", "drillingCount", "structuralDrillingCount",
+        "drillingThickness", "reception4g", "hasInternetBox", "internetBoxDistanceMeters",
+        "mediaAttachments", status, "createdAt", "updatedAt"
       )
       VALUES (
         uuid_generate_v4(), ${userId}::uuid,
@@ -97,6 +105,12 @@ export class RequestsService {
         ${dto.parkingAccess || null}, ${dto.parkingSpots || null},
         ${dto.targetInstallerId || null}::uuid, ${!!dto.targetInstallerId},
         ${dto.targetInstallerId ? 'DIRECT' : 'ZONE'},
+        ${dto.contactPreference || null}, ${desiredInstallDate},
+        ${dto.indicativeBudget ?? null}, ${dto.evModel || null},
+        ${dto.panelDistanceMeters ?? null}, ${dto.drillingCount ?? null},
+        ${dto.structuralDrillingCount ?? null}, ${dto.drillingThickness || null},
+        ${dto.reception4g || null}::"Reception4G", ${dto.hasInternetBox ?? null},
+        ${dto.internetBoxDistanceMeters ?? null}, ${JSON.stringify(mediaAttachments)}::jsonb,
         'SUBMITTED'::"RequestStatus", NOW(), NOW()
       )
       RETURNING id
@@ -113,6 +127,20 @@ export class RequestsService {
       this.logger.log(
         `📧 Envoi email demande ciblée → ${targetedInstaller.user.email} (demande ${saved.id})`
       );
+      await this.messagingService.ensureConversation({
+        clientId: userId,
+        installerId: targetedInstaller.id,
+        requestId: saved.id,
+        context: ConversationContext.LEAD,
+      });
+      await this.messagingService.createNotification({
+        userId: targetedInstaller.user.id,
+        actorId: userId,
+        type: NotificationType.NEW_REQUEST,
+        title: 'Nouvelle demande recue',
+        body: `${client?.firstName ?? 'Un client'} ${client?.lastName ?? ''} vous a envoye une demande directe.`,
+        link: `/dashboard/installer/requests/${saved.id}`,
+      });
       this.mailService.sendRequestToInstaller({
         request: saved, installer: targetedInstaller, client,
       }).catch(err =>
@@ -142,6 +170,7 @@ export class RequestsService {
     const installers = await this.prisma.$queryRaw<any[]>`
       SELECT
         i.id,
+        i."userId",
         i."companyName",
         i."interventionRadius",
         u.email,
@@ -165,6 +194,20 @@ export class RequestsService {
     );
 
     for (const installer of installers) {
+      await this.messagingService.ensureConversation({
+        clientId: request.userId,
+        installerId: installer.id,
+        requestId: request.id,
+        context: ConversationContext.LEAD,
+      });
+      await this.messagingService.createNotification({
+        userId: installer.userId,
+        actorId: request.userId,
+        type: NotificationType.NEW_REQUEST,
+        title: 'Nouvelle demande dans votre zone',
+        body: `${client?.firstName ?? 'Un client'} a depose une demande a ${request.city}.`,
+        link: '/dashboard/installer',
+      });
       this.mailService.sendZoneRequestNotification({
         request,
         installer,
@@ -225,16 +268,38 @@ export class RequestsService {
       action:  dto.action,
     }).catch(err => this.logger.error('Email client échoué: ' + err.message));
 
+    const installer = await this.prisma.installer.findUnique({
+      where: { id: installerId },
+      select: { userId: true, companyName: true },
+    });
+    await this.messagingService.createNotification({
+      userId: updated.userId,
+      actorId: installer?.userId,
+      type: NotificationType.REQUEST_RESPONSE,
+      title: dto.action === 'ACCEPT' ? 'Demande acceptee' : 'Demande refusee',
+      body: `${installer?.companyName ?? 'Un installateur'} a repondu a votre demande.`,
+      link: '/dashboard',
+    });
+
     return updated;
   }
 
   // ─────────────────────────────────────────────────────────────────────────
   async findOne(id: string, userId: string, installerId?: string) {
-    const req = await this.prisma.installationRequest.findUnique({
+    let req = await this.prisma.installationRequest.findUnique({
       where:   { id },
       include: {
         quotes:  { include: { installer: true } },
-        user:    { select: { firstName: true, lastName: true, email: true, phone: true } },
+        user:    { select: { id: true, firstName: true, lastName: true, email: true, phone: true, role: true, createdAt: true } },
+        conversations: {
+          where: installerId ? { installerId } : undefined,
+          include: {
+            messages: {
+              orderBy: { createdAt: 'asc' },
+              include: { sender: { select: { id: true, firstName: true, lastName: true, role: true } } },
+            },
+          },
+        },
       },
     });
 
@@ -242,9 +307,53 @@ export class RequestsService {
 
     const isOwner              = req.userId === userId;
     const isTargetedInstaller  = !!installerId && (req as any).targetInstallerId === installerId;
+    let isZoneInstaller = false;
 
-    if (!isOwner && !isTargetedInstaller) {
+    if (!isOwner && !isTargetedInstaller && installerId && (req as any).source !== 'DIRECT') {
+      const rows = await this.prisma.$queryRaw<{ allowed: boolean }[]>`
+        SELECT EXISTS (
+          SELECT 1
+          FROM "installation_requests" r
+          JOIN installers i ON i.id = ${installerId}::uuid
+          WHERE r.id = ${id}::uuid
+            AND r.status IN ('SUBMITTED'::"RequestStatus", 'MATCHED'::"RequestStatus")
+            AND i."isActive" = true
+            AND ST_DWithin(i.location, r.location, i."interventionRadius" * 1000)
+        ) AS allowed
+      `;
+      isZoneInstaller = !!rows[0]?.allowed;
+    }
+
+    if (!isOwner && !isTargetedInstaller && !isZoneInstaller) {
       throw new ForbiddenException('Accès non autorisé à cette demande');
+    }
+
+    if (installerId && !isOwner && req.conversations.length === 0) {
+      await this.messagingService.ensureConversation({
+        clientId: req.userId,
+        installerId,
+        requestId: req.id,
+        context: ConversationContext.LEAD,
+      });
+
+      req = await this.prisma.installationRequest.findUnique({
+        where: { id },
+        include: {
+          quotes:  { include: { installer: true } },
+          user:    { select: { id: true, firstName: true, lastName: true, email: true, phone: true, role: true, createdAt: true } },
+          conversations: {
+            where: { installerId },
+            include: {
+              messages: {
+                orderBy: { createdAt: 'asc' },
+                include: { sender: { select: { id: true, firstName: true, lastName: true, role: true } } },
+              },
+            },
+          },
+        },
+      });
+
+      if (!req) throw new NotFoundException('Demande introuvable');
     }
 
     return req;

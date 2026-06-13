@@ -1,0 +1,104 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1450" height="900" viewBox="0 0 1450 900">
+  <defs>
+    <marker id="arrow" markerWidth="11" markerHeight="11" refX="10" refY="5.5" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L11,5.5 L0,11 z" fill="#111"/>
+    </marker>
+    <style>
+      .box { fill: #fff; stroke: #111; stroke-width: 2; }
+      .note { fill: #1ee9ec; stroke: #111; stroke-width: 2; }
+      .line { fill: none; stroke: #111; stroke-width: 2; marker-end: url(#arrow); }
+      .obj { font: 20px Arial, Helvetica, sans-serif; fill: #111; text-decoration: underline; }
+      .st { font: 15px Arial, Helvetica, sans-serif; fill: #111; }
+      .actor { font: 20px Arial, Helvetica, sans-serif; fill: #111; }
+      .msg { font: 18px Arial, Helvetica, sans-serif; fill: #111; }
+      .title { font: 700 24px Arial, Helvetica, sans-serif; fill: #111; }
+      .noteText { font: 18px Arial, Helvetica, sans-serif; fill: #111; }
+    </style>
+  </defs>
+
+  <text x="38" y="42" class="title">Diagramme de communication UML - Creer un compte</text>
+
+  <!-- Actor -->
+  <text x="58" y="122" class="actor">Utilisateur</text>
+
+  <!-- Objects -->
+  <rect x="225" y="78" width="250" height="86" class="box"/>
+  <text x="270" y="115" class="obj">:FormulaireInscription</text>
+  <text x="306" y="142" class="st">&lt;&lt;boundary&gt;&gt;</text>
+
+  <rect x="630" y="78" width="255" height="86" class="box"/>
+  <text x="670" y="115" class="obj">ci:ControleInscription</text>
+  <text x="715" y="142" class="st">&lt;&lt;control&gt;&gt;</text>
+
+  <rect x="985" y="78" width="220" height="86" class="box"/>
+  <text x="1032" y="115" class="obj">u:Utilisateur</text>
+  <text x="1050" y="142" class="st">&lt;&lt;entity&gt;&gt;</text>
+
+  <rect x="985" y="295" width="245" height="86" class="box"/>
+  <text x="1020" y="332" class="obj">pi:ProfilInstallateur</text>
+  <text x="1062" y="359" class="st">&lt;&lt;entity&gt;&gt;</text>
+
+  <rect x="260" y="315" width="245" height="86" class="box"/>
+  <text x="296" y="352" class="obj">q:QualificationQualifelec</text>
+  <text x="340" y="379" class="st">&lt;&lt;entity&gt;&gt;</text>
+
+  <rect x="260" y="545" width="245" height="86" class="box"/>
+  <text x="306" y="582" class="obj">rq:RegistreQualifelec</text>
+  <text x="332" y="609" class="st">&lt;&lt;external&gt;&gt;</text>
+
+  <rect x="640" y="545" width="235" height="86" class="box"/>
+  <text x="680" y="582" class="obj">ev:EmailVerification</text>
+  <text x="712" y="609" class="st">&lt;&lt;entity&gt;&gt;</text>
+
+  <rect x="995" y="545" width="205" height="86" class="box"/>
+  <text x="1042" y="582" class="obj">:BoiteMail</text>
+  <text x="1052" y="609" class="st">&lt;&lt;external&gt;&gt;</text>
+
+  <rect x="230" y="735" width="280" height="86" class="box"/>
+  <text x="268" y="772" class="obj">:PageVerificationEmail</text>
+  <text x="330" y="799" class="st">&lt;&lt;boundary&gt;&gt;</text>
+
+  <!-- Note, close to installer-only part -->
+  <ellipse cx="1085" cy="735" rx="185" ry="88" class="note"/>
+  <path d="M940,682 L815,610 L954,720 z" class="note"/>
+  <text x="975" y="707" class="noteText">La verification Qualifelec</text>
+  <text x="975" y="732" class="noteText">est obligatoire seulement</text>
+  <text x="975" y="757" class="noteText">pour le role INSTALLER.</text>
+
+  <!-- Main communication links and messages -->
+  <path d="M145,121 L225,121" class="line"/>
+  <text x="45" y="96" class="msg">1:demanderInscription(donnees)</text>
+
+  <path d="M475,121 L630,121" class="line"/>
+  <text x="500" y="94" class="msg">1.1:inscrire(donnees)</text>
+
+  <path d="M630,145 L505,315" class="line"/>
+  <text x="430" y="245" class="msg">1.1.1:[role=INSTALLER]</text>
+  <text x="430" y="268" class="msg">verifierSiret(siret)</text>
+
+  <path d="M382,401 L382,545" class="line"/>
+  <text x="398" y="480" class="msg">1.1.1.1:chercherCertificat(siret)</text>
+
+  <path d="M505,585 L640,585" class="line"/>
+  <text x="520" y="670" class="msg">1.1.1.2:retournerQualification(certificat, indices)</text>
+
+  <path d="M885,121 L985,121" class="line"/>
+  <text x="865" y="94" class="msg">1.2:creerCompte(nom, prenom, email,</text>
+  <text x="910" y="116" class="msg">motDePasse, telephone, role)</text>
+
+  <path d="M825,145 L985,315" class="line"/>
+  <text x="810" y="245" class="msg">1.3:[role=INSTALLER]</text>
+  <text x="810" y="268" class="msg">creerProfil(siret, certificat, indices)</text>
+
+  <path d="M758,164 L758,545" class="line"/>
+  <text x="775" y="430" class="msg">1.4:creerEmailVerification(email)</text>
+
+  <path d="M875,588 L995,588" class="line"/>
+  <text x="884" y="565" class="msg">1.5:envoyerLienVerification(email)</text>
+
+  <path d="M630,145 L475,145" class="line"/>
+  <text x="475" y="193" class="msg">1.6:afficherConfirmation()</text>
+
+  <path d="M350,164 L350,735" class="line"/>
+  <text x="365" y="712" class="msg">1.7:redirigerVersVerificationEmail()</text>
+</svg>

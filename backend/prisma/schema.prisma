@@ -29,6 +29,11 @@ model User {
   leads                    Lead[]
   sentQuotes               Quote[]               @relation("InstallerQuotes")
   reviews                  Review[]              // ← ajouté
+  clientConversations      Conversation[]        @relation("ClientConversations")
+  conversationParticipants ConversationParticipant[]
+  sentMessages             Message[]             @relation("MessageSender")
+  receivedNotifications    Notification[]        @relation("NotificationRecipient")
+  triggeredNotifications   Notification[]        @relation("NotificationActor")
 
   @@map("users")
 }
@@ -61,6 +66,7 @@ model Installer {
   leads                Lead[]
   quotes               Quote[]
   reviews              Review[]
+  conversations        Conversation[]
 
   @@map("installers")
 }
@@ -115,10 +121,23 @@ model InstallationRequest {
   respondedAt       DateTime?
   targetInstallerId String?                   @db.Uuid
   source            String                    @default("ZONE")
+  contactPreference String?
+  desiredInstallDate DateTime?
+  indicativeBudget  Decimal?                  @db.Decimal(10, 2)
+  evModel           String?
+  panelDistanceMeters Decimal?                 @db.Decimal(8, 2)
+  drillingCount     Int?
+  structuralDrillingCount Int?
+  drillingThickness String?
+  reception4g       Reception4G?
+  hasInternetBox    Boolean?
+  internetBoxDistanceMeters Decimal?           @db.Decimal(8, 2)
+  mediaAttachments  Json                       @default("[]")
   user              User                      @relation(fields: [userId], references: [id])
   quotes            Quote[]
   matches           RequestMatch[]
   reviews           Review[]                  // ← ajouté
+  conversations     Conversation[]
 
   @@map("installation_requests")
 }
@@ -153,6 +172,7 @@ model Quote {
   installer    Installer           @relation(fields: [installerId], references: [id])
   request      InstallationRequest @relation(fields: [requestId], references: [id])
   sentBy       User                @relation("InstallerQuotes", fields: [userId], references: [id])
+  conversations Conversation[]
 
   @@map("quotes")
 }
@@ -183,8 +203,85 @@ model Lead {
   updatedAt   DateTime   @updatedAt
   client      User       @relation(fields: [clientId], references: [id])
   installer   Installer  @relation(fields: [installerId], references: [id])
+  conversations Conversation[]
 
   @@map("leads")
+}
+
+model Conversation {
+  id            String                    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  clientId      String                    @db.Uuid
+  installerId   String                    @db.Uuid
+  requestId     String?                   @db.Uuid
+  leadId        String?                   @db.Uuid
+  quoteId       String?                   @db.Uuid
+  context       ConversationContext       @default(PRE_REQUEST)
+  status        ConversationStatus        @default(ACTIVE)
+  lastMessageAt DateTime?
+  createdAt     DateTime                  @default(now())
+  updatedAt     DateTime                  @updatedAt
+  client        User                      @relation("ClientConversations", fields: [clientId], references: [id])
+  installer     Installer                 @relation(fields: [installerId], references: [id])
+  request       InstallationRequest?      @relation(fields: [requestId], references: [id])
+  lead          Lead?                     @relation(fields: [leadId], references: [id])
+  quote         Quote?                    @relation(fields: [quoteId], references: [id])
+  participants  ConversationParticipant[]
+  messages      Message[]
+
+  @@index([clientId])
+  @@index([installerId])
+  @@index([requestId])
+  @@index([leadId])
+  @@index([quoteId])
+  @@map("conversations")
+}
+
+model ConversationParticipant {
+  id             String       @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  conversationId String       @db.Uuid
+  userId         String       @db.Uuid
+  lastReadAt     DateTime?
+  createdAt      DateTime     @default(now())
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([conversationId, userId])
+  @@index([userId])
+  @@map("conversation_participants")
+}
+
+model Message {
+  id             String       @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  conversationId String       @db.Uuid
+  senderId       String       @db.Uuid
+  body           String
+  attachments    Json         @default("[]")
+  readAt         DateTime?
+  createdAt      DateTime     @default(now())
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender         User         @relation("MessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+  @@index([senderId])
+  @@map("messages")
+}
+
+model Notification {
+  id        String           @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId    String           @db.Uuid
+  actorId   String?          @db.Uuid
+  type      NotificationType
+  title     String
+  body      String?
+  link      String?
+  readAt    DateTime?
+  createdAt DateTime         @default(now())
+  user      User             @relation("NotificationRecipient", fields: [userId], references: [id], onDelete: Cascade)
+  actor     User?            @relation("NotificationActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([userId, readAt])
+  @@index([createdAt])
+  @@map("notifications")
 }
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
@@ -208,8 +305,8 @@ enum RequestStatus {
   MATCHED
   QUOTE_SENT
   QUOTE_ACCEPTED
-  INSTALLATION     // ← ajouté : installateur a démarré
-  MISE_EN_SERVICE  // ← ajouté : installateur a terminé, attend confirmation client
+  INSTALLATION     
+  MISE_EN_SERVICE  
   IN_PROGRESS
   COMPLETED
   CANCELLED
@@ -249,4 +346,31 @@ enum LeadStatus {
   PENDING
   ACCEPTED
   REJECTED
+}
+
+enum ConversationContext {
+  PRE_REQUEST
+  LEAD
+  QUOTE
+  PROJECT
+}
+
+enum ConversationStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+enum NotificationType {
+  NEW_MESSAGE
+  NEW_QUOTE
+  QUOTE_ACCEPTED
+  NEW_REQUEST
+  REQUEST_RESPONSE
+}
+
+enum Reception4G {
+  BONNE
+  MOYENNE
+  MEDIOCRE
+  AUCUNE
 }

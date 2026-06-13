@@ -2,8 +2,8 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'IRVE Platform – Installation Borne de Recharge',
-  description: 'Trouvez un installateur IRVE certifié près de chez vous',
+  title: 'IRVE Platform - Installation de bornes de recharge',
+  description: 'Deposez un projet IRVE et trouvez un installateur qualifie pres de chez vous.',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

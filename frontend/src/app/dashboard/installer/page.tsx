@@ -467,11 +467,7 @@ export default function InstallerDashboard() {
     quotes.some(q => q.requestId === leadId || q.request?.id === leadId);
 
   const handleLeadClick = (lead: any) => {
-    if (lead.source === 'DIRECT') {
-      router.push(`/dashboard/installer/requests/${lead.id}`);
-    } else {
-      setSelectedLead(lead);
-    }
+    router.push(`/dashboard/installer/requests/${lead.id}`);
   };
 
   const handleMarkDone = async () => {

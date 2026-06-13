@@ -2,12 +2,15 @@ import { Injectable, NotFoundException, BadRequestException } from '@nestjs/comm
 import { PrismaService } from '../common/prisma/prisma.service';
 import { MailService } from '../mail/mail.service';
 import { CreateLeadDto } from './dto/create-lead.dto';
+import { MessagingService } from '../messaging/messaging.service';
+import { ConversationContext, NotificationType } from '@prisma/client';
 
 @Injectable()
 export class LeadsService {
   constructor(
     private prisma: PrismaService,
     private mail: MailService,
+    private messaging: MessagingService,
   ) {}
 
   async create(currentUser: any, dto: CreateLeadDto) {
@@ -15,7 +18,7 @@ export class LeadsService {
     const installer = await this.prisma.installer.findUnique({
       where: { id: dto.installerId },
       include: {
-        user: { select: { email: true, firstName: true, lastName: true } },
+        user: { select: { id: true, email: true, firstName: true, lastName: true } },
       },
     });
 
@@ -42,6 +45,22 @@ export class LeadsService {
       },
     });
 
+    const conversation = await this.messaging.ensureConversation({
+      clientId: client.id,
+      installerId: installer.id,
+      leadId: lead.id,
+      context: ConversationContext.LEAD,
+    });
+    await this.messaging.sendMessage(client.id, conversation.id, dto.message);
+    await this.messaging.createNotification({
+      userId: installer.user.id,
+      actorId: client.id,
+      type: NotificationType.NEW_REQUEST,
+      title: 'Nouvelle demande recue',
+      body: `${client.firstName} ${client.lastName} vous a envoye une demande.`,
+      link: `/messages/${conversation.id}`,
+    });
+
     // 4. Notifier l'installateur par email (via votre MailService)
     await this.mail.sendLeadNotification(
       installer.user.email,
@@ -58,6 +77,7 @@ export class LeadsService {
     return {
       success: true,
       leadId:  lead.id,
+      conversationId: conversation.id,
       message: "Votre demande a bien été envoyée à l'installateur.",
     };
   }
@@ -101,9 +121,20 @@ export class LeadsService {
       throw new BadRequestException('Demande introuvable ou accès refusé.');
     }
 
-    return this.prisma.lead.update({
+    const updated = await this.prisma.lead.update({
       where: { id: leadId },
       data: { status },
     });
+
+    await this.messaging.createNotification({
+      userId: updated.clientId,
+      actorId: userId,
+      type: NotificationType.REQUEST_RESPONSE,
+      title: status === 'ACCEPTED' ? 'Demande acceptee' : 'Demande refusee',
+      body: `L'installateur a repondu a votre demande.`,
+      link: '/dashboard',
+    });
+
+    return updated;
   }
 }

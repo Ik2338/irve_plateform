@@ -2,7 +2,8 @@ import { Injectable, NotFoundException, ForbiddenException, BadRequestException,
 import { PrismaService } from '../common/prisma/prisma.service';
 import { MailService }   from '../mail/mail.service';
 import { CreateQuoteDto } from './dto/create-quote.dto';
-import { QuoteStatus } from '@prisma/client';
+import { ConversationContext, NotificationType, QuoteStatus } from '@prisma/client';
+import { MessagingService } from '../messaging/messaging.service';
 
 @Injectable()
 export class QuotesService {
@@ -11,6 +12,7 @@ export class QuotesService {
   constructor(
     private prisma:      PrismaService,
     private mailService: MailService,
+    private messaging:   MessagingService,
   ) {}
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -62,6 +64,22 @@ export class QuotesService {
         data:  { status: 'QUOTE_SENT' },
       });
     }
+
+    const conversation = await this.messaging.ensureConversation({
+      clientId: request.userId,
+      installerId: installer.id,
+      requestId: request.id,
+      quoteId: quote.id,
+      context: ConversationContext.QUOTE,
+    });
+    await this.messaging.createNotification({
+      userId: request.userId,
+      actorId: installer.userId,
+      type: NotificationType.NEW_QUOTE,
+      title: 'Nouveau devis recu',
+      body: `${installer.companyName} vous a envoye un devis de ${quote.amount.toLocaleString('fr-FR')} EUR HT.`,
+      link: `/messages/${conversation.id}`,
+    });
 
     // Email au client — fire-and-forget
     this.prisma.user.findUnique({
@@ -122,6 +140,26 @@ export class QuotesService {
           `🚫 ${otherQuotes.length} autre(s) devis automatiquement refusé(s) pour la demande ${quote.requestId}`
         );
       }
+
+      const installer = await this.prisma.installer.findUnique({
+        where: { id: quote.installerId },
+        select: { userId: true, companyName: true },
+      });
+      const conversation = await this.messaging.ensureConversation({
+        clientId: quote.userId,
+        installerId: quote.installerId,
+        requestId: quote.requestId,
+        quoteId: quote.id,
+        context: ConversationContext.PROJECT,
+      });
+      await this.messaging.createNotification({
+        userId: installer?.userId ?? quote.userId,
+        actorId: quote.userId,
+        type: NotificationType.QUOTE_ACCEPTED,
+        title: 'Devis accepte',
+        body: `Votre devis a ete accepte. La conversation devient le canal principal du projet.`,
+        link: `/messages/${conversation.id}`,
+      });
     }
 
     return updated;

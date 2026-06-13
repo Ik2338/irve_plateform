@@ -11,6 +11,7 @@ import { AdminModule } from './admin/admin.module';
 import { PrismaModule } from './common/prisma/prisma.module';
 import { LeadsModule } from './leads/leads.module';
 import { ReviewsModule } from './reviews/reviews.module';
+import { MessagingModule } from './messaging/messaging.module';
 
 
 @Module({
@@ -27,6 +28,7 @@ import { ReviewsModule } from './reviews/reviews.module';
     AdminModule,
     LeadsModule,
     ReviewsModule,
+    MessagingModule,
   ],
 })
 export class AppModule {}

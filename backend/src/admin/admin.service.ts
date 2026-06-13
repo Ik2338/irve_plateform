@@ -8,26 +8,98 @@ export class AdminService {
 
   // ─── Stats dashboard ──────────────────────────────────────────────────────
   async getDashboardStats() {
-    const [users, installers, requests, quotes] = await Promise.all([
+    const since30Days = new Date();
+    since30Days.setDate(since30Days.getDate() - 30);
+
+    const [users, installers, requests, quotes, leads, reviews, conversations] = await Promise.all([
       this.prisma.user.count(),
       this.prisma.installer.count(),
       this.prisma.installationRequest.count(),
       this.prisma.quote.count(),
+      this.prisma.lead.count(),
+      this.prisma.review.count(),
+      this.prisma.conversation.count(),
     ]);
 
-    const requestsByStatus = await this.prisma.installationRequest.groupBy({
-      by: ['status'],
-      _count: { status: true },
-    });
+    const [
+      requestsByStatus,
+      quotesByStatus,
+      usersByRole,
+      pendingInstallers,
+      verifiedInstallers,
+      activeInstallers,
+      inactiveInstallers,
+      newUsers30Days,
+      newRequests30Days,
+      newQuotes30Days,
+      topCities,
+      quoteAmounts,
+    ] = await Promise.all([
+      this.prisma.installationRequest.groupBy({
+        by: ['status'],
+        _count: { status: true },
+      }),
+      this.prisma.quote.groupBy({
+        by: ['status'],
+        _count: { status: true },
+      }),
+      this.prisma.user.groupBy({
+        by: ['role'],
+        _count: { role: true },
+      }),
+      this.prisma.installer.count({ where: { isVerified: false } }),
+      this.prisma.installer.count({ where: { isVerified: true } }),
+      this.prisma.installer.count({ where: { isActive: true } }),
+      this.prisma.installer.count({ where: { isActive: false } }),
+      this.prisma.user.count({ where: { createdAt: { gte: since30Days } } }),
+      this.prisma.installationRequest.count({ where: { createdAt: { gte: since30Days } } }),
+      this.prisma.quote.count({ where: { createdAt: { gte: since30Days } } }),
+      this.prisma.installationRequest.groupBy({
+        by: ['city'],
+        where: { city: { not: '' } },
+        _count: { city: true },
+        orderBy: { _count: { city: 'desc' } },
+        take: 5,
+      }),
+      this.prisma.quote.aggregate({
+        _avg: { amount: true },
+        _sum: { amount: true },
+      }),
+    ]);
 
-    const pendingInstallers = await this.prisma.installer.count({
-      where: { isVerified: false },
-    });
+    const countByStatus = (rows: { status: string; _count: Record<string, number> }[], status: string) =>
+      rows.find((row) => row.status === status)?._count.status ?? 0;
+
+    const completedRequests = countByStatus(requestsByStatus, 'COMPLETED');
+    const acceptedQuotes = countByStatus(quotesByStatus, 'ACCEPTED');
 
     return {
-      totals: { users, installers, requests, quotes },
+      totals: { users, installers, requests, quotes, leads, reviews, conversations },
       requestsByStatus,
+      quotesByStatus,
+      usersByRole,
       pendingInstallers,
+      installers: {
+        pending: pendingInstallers,
+        verified: verifiedInstallers,
+        active: activeInstallers,
+        inactive: inactiveInstallers,
+      },
+      recentActivity: {
+        newUsers30Days,
+        newRequests30Days,
+        newQuotes30Days,
+      },
+      performance: {
+        completionRate: requests ? Math.round((completedRequests / requests) * 100) : 0,
+        quoteAcceptanceRate: quotes ? Math.round((acceptedQuotes / quotes) * 100) : 0,
+        averageQuoteAmount: Math.round(quoteAmounts._avg.amount ?? 0),
+        totalQuoteAmount: Math.round(quoteAmounts._sum.amount ?? 0),
+      },
+      topCities: topCities.map((city) => ({
+        city: city.city,
+        count: city._count.city,
+      })),
     };
   }
 

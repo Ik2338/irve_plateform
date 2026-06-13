@@ -76,13 +76,61 @@ export class MatchingService {
 
     const leads: any[] = await this.prisma.$queryRaw`
       SELECT
-        r.id, r."projectType", r."powerLevel", r.city, r."postalCode", r.status, r."createdAt",
-        ST_Distance(i.location, r.location) / 1000 AS distance_km
+        r.id,
+        r."userId",
+        r."projectType",
+        r."powerLevel",
+        r.quantity,
+        r.address,
+        r.city,
+        r."postalCode",
+        r.description,
+        r."hasExistingPanel",
+        r."parkingType",
+        r.urgency,
+        r.status,
+        r."createdAt",
+        r."updatedAt",
+        r.connectors,
+        r."parkingAccess",
+        r."parkingSpots",
+        r."installerNote",
+        r."isTargeted",
+        r."respondedAt",
+        r."targetInstallerId",
+        r.source,
+        r."contactPreference",
+        r."desiredInstallDate",
+        r."indicativeBudget",
+        r."evModel",
+        r."panelDistanceMeters",
+        r."drillingCount",
+        r."structuralDrillingCount",
+        r."drillingThickness",
+        r."reception4g",
+        r."hasInternetBox",
+        r."internetBoxDistanceMeters",
+        r."mediaAttachments",
+        ST_Distance(i.location, r.location) / 1000 AS distance_km,
+        json_build_object(
+          'id', u.id,
+          'firstName', u."firstName",
+          'lastName', u."lastName",
+          'email', u.email,
+          'phone', u.phone
+        ) AS user
       FROM installation_requests r
       CROSS JOIN installers i
+      JOIN users u ON u.id = r."userId"
       WHERE i.id = ${installer.id}::uuid
         AND r.status IN ('SUBMITTED', 'MATCHED')
-        AND ST_DWithin(i.location, r.location, i."interventionRadius" * 1000)
+        AND (
+          r."targetInstallerId" = i.id
+          OR (
+            r.source <> 'DIRECT'
+            AND ST_DWithin(i.location, r.location, i."interventionRadius" * 1000)
+          )
+        )
       ORDER BY r."createdAt" DESC
       LIMIT 50
     `;

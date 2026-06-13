@@ -63,6 +63,7 @@ services:
       REDIS_URL: redis://:${REDIS_PASSWORD:-redispassword}@redis:6379
       JWT_SECRET: ${JWT_SECRET:-supersecretjwtkey_changeme_in_production}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
+      REQUEST_BODY_LIMIT: ${REQUEST_BODY_LIMIT:-50mb}
       FRONTEND_URL: http://localhost
       MAIL_HOST: mailpit
       MAIL_PORT: 1025

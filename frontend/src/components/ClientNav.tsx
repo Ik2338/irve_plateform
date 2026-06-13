@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import { Zap, LayoutDashboard, FileText, Search, User, LogOut, ChevronDown } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
+import MessagingNavLink from './MessagingNavLink';
 
 export default function ClientNav() {
   const router = useRouter();
@@ -47,11 +48,13 @@ export default function ClientNav() {
   const initials = user ? `${user.firstName?.[0] || ''}${user.lastName?.[0] || ''}`.toUpperCase() : '?';
 
   return (
-    <nav className="bg-white border-b border-gray-100 sticky top-0 z-20 shadow-sm">
-      <div className="max-w-5xl mx-auto px-4 flex items-center justify-between h-14">
+    <nav className="bg-[#17201c]/95 border-b border-white/10 sticky top-0 z-20 shadow-sm text-white backdrop-blur">
+      <div className="max-w-6xl mx-auto px-4 flex items-center justify-between h-16">
         {/* Logo */}
-        <Link href="/dashboard" className="flex items-center gap-2 font-bold text-primary">
-          <Zap className="w-5 h-5" />
+        <Link href="/dashboard" className="flex items-center gap-2 font-bold text-white">
+          <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-white">
+            <Zap className="w-5 h-5" />
+          </span>
           <span>IRVE Platform</span>
         </Link>
 
@@ -61,26 +64,27 @@ export default function ClientNav() {
             <Link key={href} href={href}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors
                 ${pathname === href
-                  ? 'bg-primary-light text-primary'
-                  : 'text-gray-500 hover:bg-gray-100 hover:text-gray-800'}`}>
+                  ? 'bg-white/10 text-white'
+                  : 'text-white/70 hover:bg-white/10 hover:text-white'}`}>
               <Icon className="w-4 h-4" />
               {label}
             </Link>
           ))}
+          <MessagingNavLink active={pathname?.startsWith('/messages')} />
         </div>
 
         {/* User menu */}
         <div className="relative" ref={ref}>
           <button
             onClick={() => setOpen(!open)}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-xl hover:bg-gray-100 transition-colors border border-transparent hover:border-gray-200">
-            <div className="w-7 h-7 bg-primary text-white rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0">
+            className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-white/10 transition-colors border border-transparent hover:border-white/20">
+            <div className="w-7 h-7 bg-accent text-[#17201c] rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0">
               {initials}
             </div>
-            <span className="text-sm font-medium text-gray-700 hidden md:block">
+            <span className="text-sm font-medium text-white/80 hidden md:block">
               {user?.firstName} {user?.lastName}
             </span>
-            <ChevronDown className={`w-3.5 h-3.5 text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} />
+            <ChevronDown className={`w-3.5 h-3.5 text-white/50 transition-transform ${open ? 'rotate-180' : ''}`} />
           </button>
 
           {open && (

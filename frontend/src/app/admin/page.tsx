@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import {
   Zap, Users, Building2, FileText, CheckCircle, XCircle,
   Shield, LogOut, BarChart3, ChevronLeft, ChevronRight,
+  Activity, TrendingUp, Euro, Clock, MapPin, MessageSquare, Star,
 } from 'lucide-react';
 import { adminApi } from '@/lib/api';
 import { STATUS_LABELS } from '@/types';
@@ -13,6 +14,20 @@ import toast from 'react-hot-toast';
 type Tab = 'stats' | 'installers' | 'users' | 'requests';
 
 const PAGE_SIZE = 10;
+
+const QUOTE_STATUS_LABELS: Record<string, string> = {
+  PENDING: 'En attente',
+  SENT: 'Envoyés',
+  ACCEPTED: 'Acceptés',
+  REFUSED: 'Refusés',
+  EXPIRED: 'Expirés',
+};
+
+const USER_ROLE_LABELS: Record<string, string> = {
+  CLIENT: 'Clients',
+  INSTALLER: 'Installateurs',
+  ADMIN: 'Admins',
+};
 
 interface PaginatedState<T> {
   data: T[];
@@ -91,6 +106,23 @@ function Pagination({ page, total, onPage }: { page: number; total: number; onPa
       </div>
     </div>
   );
+}
+
+function groupCount(row: any): number {
+  return row?._count?.status ?? row?._count?.role ?? row?._count?.city ?? 0;
+}
+
+function barWidth(value: number, max: number): string {
+  if (!max || value <= 0) return '0%';
+  return `${Math.max(6, Math.round((value / max) * 100))}%`;
+}
+
+function formatCurrency(value: number): string {
+  return new Intl.NumberFormat('fr-FR', {
+    style: 'currency',
+    currency: 'EUR',
+    maximumFractionDigits: 0,
+  }).format(value ?? 0);
 }
 
 export default function AdminPage() {
@@ -192,39 +224,218 @@ export default function AdminPage() {
         </div>
 
         {/* ── STATS ── */}
-        {tab === 'stats' && stats && (
-          <div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+        {tab === 'stats' && stats && (() => {
+          const requestRows = stats.requestsByStatus ?? [];
+          const quoteRows = stats.quotesByStatus ?? [];
+          const roleRows = stats.usersByRole ?? [];
+          const cityRows = stats.topCities ?? [];
+          const maxRequest = Math.max(...requestRows.map(groupCount), 0);
+          const maxQuote = Math.max(...quoteRows.map(groupCount), 0);
+          const maxRole = Math.max(...roleRows.map(groupCount), 0);
+          const maxCity = Math.max(...cityRows.map((city: any) => city.count ?? 0), 0);
+
+          return (
+          <div className="space-y-8">
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">Statistiques plateforme</h1>
+              <p className="text-sm text-gray-500 mt-1">Consulter les statistiques plateforme</p>
+            </div>
+
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               {[
-                { label: 'Utilisateurs', value: stats.totals.users, Icon: Users },
-                { label: 'Installateurs', value: stats.totals.installers, Icon: Building2 },
-                { label: 'Demandes', value: stats.totals.requests, Icon: FileText },
-                { label: 'Devis', value: stats.totals.quotes, Icon: CheckCircle },
-              ].map(({ label, value, Icon }) => (
+                { label: 'Utilisateurs', value: stats.totals.users, Icon: Users, tone: 'bg-blue-50 text-blue-600' },
+                { label: 'Installateurs', value: stats.totals.installers, Icon: Building2, tone: 'bg-green-50 text-green-600' },
+                { label: 'Demandes', value: stats.totals.requests, Icon: FileText, tone: 'bg-orange-50 text-orange-600' },
+                { label: 'Devis', value: stats.totals.quotes, Icon: CheckCircle, tone: 'bg-violet-50 text-violet-600' },
+                { label: 'Leads', value: stats.totals.leads ?? 0, Icon: Activity, tone: 'bg-cyan-50 text-cyan-600' },
+                { label: 'Conversations', value: stats.totals.conversations ?? 0, Icon: MessageSquare, tone: 'bg-indigo-50 text-indigo-600' },
+                { label: 'Avis', value: stats.totals.reviews ?? 0, Icon: Star, tone: 'bg-amber-50 text-amber-600' },
+                { label: 'CA devis', value: formatCurrency(stats.performance?.totalQuoteAmount ?? 0), Icon: Euro, tone: 'bg-emerald-50 text-emerald-600' },
+              ].map(({ label, value, Icon, tone }) => (
                 <div key={label} className="card flex items-center gap-4">
-                  <div className="w-10 h-10 bg-primary-light rounded-xl flex items-center justify-center flex-shrink-0">
-                    <Icon className="w-5 h-5 text-primary" />
+                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${tone}`}>
+                    <Icon className="w-5 h-5" />
                   </div>
-                  <div>
-                    <div className="text-2xl font-bold">{value}</div>
+                  <div className="min-w-0">
+                    <div className="text-2xl font-bold truncate">{value}</div>
                     <div className="text-sm text-gray-500">{label}</div>
                   </div>
                 </div>
               ))}
             </div>
+            <div className="grid md:grid-cols-3 gap-4">
+              {[
+                { label: 'Demandes terminées', value: `${stats.performance?.completionRate ?? 0}%`, Icon: CheckCircle },
+                { label: 'Devis acceptés', value: `${stats.performance?.quoteAcceptanceRate ?? 0}%`, Icon: TrendingUp },
+                { label: 'Montant moyen devis', value: formatCurrency(stats.performance?.averageQuoteAmount ?? 0), Icon: Euro },
+              ].map(({ label, value, Icon }) => (
+                <div key={label} className="card">
+                  <div className="flex items-center gap-2 text-sm font-medium text-gray-500">
+                    <Icon className="w-4 h-4 text-primary" />
+                    {label}
+                  </div>
+                  <div className="text-3xl font-bold mt-3">{value}</div>
+                </div>
+              ))}
+            </div>
+
+            <div className="grid lg:grid-cols-3 gap-4">
+              <div className="card">
+                <div className="flex items-center gap-2 font-semibold mb-4">
+                  <Clock className="w-4 h-4 text-primary" />
+                  Activité 30 jours
+                </div>
+                <div className="space-y-4">
+                  {[
+                    { label: 'Nouveaux utilisateurs', value: stats.recentActivity?.newUsers30Days ?? 0 },
+                    { label: 'Nouvelles demandes', value: stats.recentActivity?.newRequests30Days ?? 0 },
+                    { label: 'Nouveaux devis', value: stats.recentActivity?.newQuotes30Days ?? 0 },
+                  ].map(({ label, value }) => (
+                    <div key={label} className="flex items-center justify-between gap-3">
+                      <span className="text-sm text-gray-500">{label}</span>
+                      <span className="font-semibold">{value}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="card">
+                <div className="flex items-center gap-2 font-semibold mb-4">
+                  <Shield className="w-4 h-4 text-primary" />
+                  Installateurs
+                </div>
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <div className="text-gray-500">Vérifiés</div>
+                    <div className="text-xl font-bold">{stats.installers?.verified ?? 0}</div>
+                  </div>
+                  <div>
+                    <div className="text-gray-500">En attente</div>
+                    <div className="text-xl font-bold">{stats.installers?.pending ?? stats.pendingInstallers ?? 0}</div>
+                  </div>
+                  <div>
+                    <div className="text-gray-500">Actifs</div>
+                    <div className="text-xl font-bold">{stats.installers?.active ?? 0}</div>
+                  </div>
+                  <div>
+                    <div className="text-gray-500">Inactifs</div>
+                    <div className="text-xl font-bold">{stats.installers?.inactive ?? 0}</div>
+                  </div>
+                </div>
+              </div>
+
             {stats.pendingInstallers > 0 && (
-              <div className="card border-orange-200 bg-orange-50 flex items-center gap-3">
+              <div className="card border-orange-200 bg-orange-50 flex flex-col gap-4">
+                <div className="flex items-center gap-3">
                 <Shield className="w-5 h-5 text-orange-500 flex-shrink-0" />
                 <p className="text-sm text-orange-700">
                   <strong>{stats.pendingInstallers}</strong> installateur(s) en attente de vérification.
                 </p>
-                <button onClick={() => setTab('installers')} className="ml-auto text-sm text-orange-700 font-medium underline">
-                  Voir
+                </div>
+                <button onClick={() => setTab('installers')} className="btn-outline text-sm w-fit border-orange-300 text-orange-700 hover:bg-orange-100">
+                  Voir les installateurs
                 </button>
               </div>
             )}
+            </div>
+
+            <div className="grid lg:grid-cols-2 gap-4">
+              <div className="card">
+                <div className="flex items-center gap-2 font-semibold mb-4">
+                  <FileText className="w-4 h-4 text-primary" />
+                  Demandes par statut
+                </div>
+                <div className="space-y-3">
+                  {requestRows.map((row: any) => {
+                    const value = groupCount(row);
+                    return (
+                      <div key={row.status}>
+                        <div className="flex justify-between text-sm mb-1">
+                          <span className="text-gray-600">{STATUS_LABELS[row.status as any] || row.status}</span>
+                          <span className="font-medium">{value}</span>
+                        </div>
+                        <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                          <div className="h-full bg-primary rounded-full" style={{ width: barWidth(value, maxRequest) }} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {requestRows.length === 0 && <p className="text-sm text-gray-500">Aucune demande.</p>}
+                </div>
+              </div>
+
+              <div className="card">
+                <div className="flex items-center gap-2 font-semibold mb-4">
+                  <CheckCircle className="w-4 h-4 text-primary" />
+                  Devis par statut
+                </div>
+                <div className="space-y-3">
+                  {quoteRows.map((row: any) => {
+                    const value = groupCount(row);
+                    return (
+                      <div key={row.status}>
+                        <div className="flex justify-between text-sm mb-1">
+                          <span className="text-gray-600">{QUOTE_STATUS_LABELS[row.status] || row.status}</span>
+                          <span className="font-medium">{value}</span>
+                        </div>
+                        <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                          <div className="h-full bg-green-500 rounded-full" style={{ width: barWidth(value, maxQuote) }} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {quoteRows.length === 0 && <p className="text-sm text-gray-500">Aucun devis.</p>}
+                </div>
+              </div>
+
+              <div className="card">
+                <div className="flex items-center gap-2 font-semibold mb-4">
+                  <Users className="w-4 h-4 text-primary" />
+                  Utilisateurs par rôle
+                </div>
+                <div className="space-y-3">
+                  {roleRows.map((row: any) => {
+                    const value = groupCount(row);
+                    return (
+                      <div key={row.role}>
+                        <div className="flex justify-between text-sm mb-1">
+                          <span className="text-gray-600">{USER_ROLE_LABELS[row.role] || row.role}</span>
+                          <span className="font-medium">{value}</span>
+                        </div>
+                        <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                          <div className="h-full bg-orange-500 rounded-full" style={{ width: barWidth(value, maxRole) }} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {roleRows.length === 0 && <p className="text-sm text-gray-500">Aucun utilisateur.</p>}
+                </div>
+              </div>
+
+              <div className="card">
+                <div className="flex items-center gap-2 font-semibold mb-4">
+                  <MapPin className="w-4 h-4 text-primary" />
+                  Villes les plus actives
+                </div>
+                <div className="space-y-3">
+                  {cityRows.map((row: any) => (
+                    <div key={row.city}>
+                      <div className="flex justify-between text-sm mb-1">
+                        <span className="text-gray-600">{row.city}</span>
+                        <span className="font-medium">{row.count}</span>
+                      </div>
+                      <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                        <div className="h-full bg-violet-500 rounded-full" style={{ width: barWidth(row.count, maxCity) }} />
+                      </div>
+                    </div>
+                  ))}
+                  {cityRows.length === 0 && <p className="text-sm text-gray-500">Aucune ville.</p>}
+                </div>
+              </div>
+            </div>
           </div>
-        )}
+          );
+        })()}
 
         {/* ── INSTALLERS ── */}
         {tab === 'installers' && (

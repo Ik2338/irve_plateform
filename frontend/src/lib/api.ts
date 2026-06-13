@@ -150,3 +150,25 @@ export const reviewsApi = {
   forInstaller: (installerId: string) =>
     api.get(`/reviews/installer/${installerId}`),
 };
+
+export const messagingApi = {
+  start: (data: {
+    installerId: string;
+    requestId?: string;
+    leadId?: string;
+    quoteId?: string;
+    context?: 'PRE_REQUEST' | 'LEAD' | 'QUOTE' | 'PROJECT';
+    message?: string;
+  }) => api.post('/conversations/start', data),
+  list: () => api.get('/conversations'),
+  get: (id: string) => safeUuid(id, 'messagingApi.get') ?? api.get(`/conversations/${id}`),
+  send: (id: string, body: string, attachments?: any[]) =>
+    safeUuid(id, 'messagingApi.send') ?? api.post(`/conversations/${id}/messages`, { body, attachments }),
+  markRead: (id: string) =>
+    safeUuid(id, 'messagingApi.markRead') ?? api.patch(`/conversations/${id}/read`),
+  unreadCount: () => api.get('/conversations/unread-count'),
+  notifications: () => api.get('/notifications'),
+  readNotification: (id: string) =>
+    safeUuid(id, 'messagingApi.readNotification') ?? api.patch(`/notifications/${id}/read`),
+  readAllNotifications: () => api.patch('/notifications/read-all'),
+};
