@@ -7,6 +7,7 @@ import { ArrowLeft, CalendarClock, CheckCheck, FileText, Paperclip, SendHorizona
 import ClientNav from '@/components/ClientNav';
 import InstallerNav from '@/components/InstallerNav';
 import { messagingApi } from '@/lib/api';
+import { getAttachmentHref, isImageAttachment } from '@/lib/messaging';
 import toast from 'react-hot-toast';
 
 function ConversationNav({ role }: { role?: string }) {
@@ -33,6 +34,7 @@ export default function ConversationPage() {
   const [conversation, setConversation] = useState<any>(null);
   const [body, setBody] = useState('');
   const [attachments, setAttachments] = useState<any[]>([]);
+  const [previewAttachment, setPreviewAttachment] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
 
@@ -90,7 +92,7 @@ export default function ConversationPage() {
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
     const text = body.trim();
-    if (!text || sending) return;
+    if ((!text && attachments.length === 0) || sending) return;
     setSending(true);
     try {
       await messagingApi.send(id, text, attachments);
@@ -131,6 +133,23 @@ export default function ConversationPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       <ConversationNav role={user?.role} />
+      {previewAttachment && (
+        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4" role="dialog" aria-modal="true">
+          <button
+            type="button"
+            onClick={() => setPreviewAttachment(null)}
+            className="absolute right-4 top-4 w-10 h-10 rounded-full bg-white/10 text-white flex items-center justify-center hover:bg-white/20"
+            title="Fermer"
+          >
+            <X className="w-5 h-5" />
+          </button>
+          <img
+            src={getAttachmentHref(previewAttachment)}
+            alt={previewAttachment.fileName || 'Image envoyee'}
+            className="max-h-[88vh] max-w-[92vw] rounded-xl object-contain shadow-2xl"
+          />
+        </div>
+      )}
 
       <div className="max-w-5xl mx-auto px-4 py-6">
         <div className="bg-white border border-gray-100 rounded-xl shadow-sm overflow-hidden min-h-[calc(100vh-8rem)] flex flex-col">
@@ -181,19 +200,42 @@ export default function ConversationPage() {
                       <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">{message.body}</p>
                       {message.attachments?.length > 0 && (
                         <div className="mt-2 flex flex-wrap gap-2">
-                          {message.attachments.map((file: any, index: number) => (
-                            <a
-                              key={`${file.fileName}-${index}`}
-                              href={file.dataUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className={`inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs ${
-                                mine ? 'bg-white/15 text-white' : 'bg-gray-50 text-primary border border-gray-100'
-                              }`}
-                            >
-                              <FileText className="w-3 h-3" />{file.fileName}
-                            </a>
-                          ))}
+                          {message.attachments.map((file: any, index: number) => {
+                            const href = getAttachmentHref(file);
+                            const isImage = isImageAttachment(file);
+                            if (isImage) {
+                              return (
+                                <button
+                                  type="button"
+                                  key={`${file.fileName}-${index}`}
+                                  onClick={() => setPreviewAttachment(file)}
+                                  className={`group overflow-hidden rounded-xl border ${
+                                    mine ? 'border-white/20 bg-white/15' : 'border-gray-100 bg-gray-50'
+                                  }`}
+                                  title={file.fileName || 'Voir image'}
+                                >
+                                  <img
+                                    src={href}
+                                    alt={file.fileName || 'Image envoyee'}
+                                    className="h-28 w-36 object-cover transition-transform group-hover:scale-105"
+                                  />
+                                </button>
+                              );
+                            }
+                            return (
+                              <a
+                                key={`${file.fileName}-${index}`}
+                                href={href}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className={`inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs ${
+                                  mine ? 'bg-white/15 text-white' : 'bg-gray-50 text-primary border border-gray-100'
+                                }`}
+                              >
+                                <FileText className="w-3 h-3" />{file.fileName}
+                              </a>
+                            );
+                          })}
                         </div>
                       )}
                       <div className={`flex items-center justify-end gap-1 mt-1 text-[11px] ${mine ? 'text-white/75' : 'text-gray-400'}`}>
@@ -267,7 +309,7 @@ export default function ConversationPage() {
               />
               <button
                 type="submit"
-                disabled={!body.trim() || sending}
+                disabled={(!body.trim() && attachments.length === 0) || sending}
                 className="w-11 h-11 rounded-xl bg-primary text-white flex items-center justify-center hover:bg-primary-dark disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 title="Envoyer"
               >

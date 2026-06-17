@@ -295,7 +295,6 @@ export default function DashboardPage() {
                     <div className="text-sm text-gray-500">{q.installer?.city}</div>
                     <div className="text-lg font-bold text-primary mt-1">
                       {q.amount?.toLocaleString('fr-FR')} €{' '}
-                      <span className="text-sm font-normal text-gray-500">HT</span>
                     </div>
                   </div>
                   {q.status === 'SENT' ? (

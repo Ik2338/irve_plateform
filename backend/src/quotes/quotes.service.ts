@@ -46,7 +46,6 @@ export class QuotesService {
     sentBy:    { connect: { id: request.userId } },   // ← was "user:", now "sentBy:"
     amount:    dto.laborCost,
     laborCost: dto.laborCost,
-    vatRate:   dto.vatRate ?? 20,
     notes:     dto.notes,
     validUntil,
     status:    QuoteStatus.SENT,
@@ -77,7 +76,7 @@ export class QuotesService {
       actorId: installer.userId,
       type: NotificationType.NEW_QUOTE,
       title: 'Nouveau devis recu',
-      body: `${installer.companyName} vous a envoye un devis de ${quote.amount.toLocaleString('fr-FR')} EUR HT.`,
+      body: `${installer.companyName} vous a envoye un devis de ${quote.amount.toLocaleString('fr-FR')} EUR.`,
       link: `/messages/${conversation.id}`,
     });
 

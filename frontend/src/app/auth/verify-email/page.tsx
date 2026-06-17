@@ -13,6 +13,11 @@ function VerifyEmailPageContent() {
   const searchParams = useSearchParams();
   const router       = useRouter();
   const token        = searchParams.get('token');
+  const redirect     = searchParams.get('redirect') || null;
+  const safeRedirect = redirect?.startsWith('/') && !redirect.startsWith('//') ? redirect : null;
+  const loginHref    = safeRedirect
+    ? `/auth/login?redirect=${encodeURIComponent(safeRedirect)}`
+    : '/auth/login';
 
   const [status,    setStatus]    = useState<Status>(token ? 'loading' : 'idle');
   const [message,   setMessage]   = useState('');
@@ -31,15 +36,41 @@ function VerifyEmailPageContent() {
       .then(({ data }) => {
         setStatus('success');
         setMessage(data.message);
-        if (data.token) localStorage.setItem('irve_token', data.token);
-        setTimeout(() => router.push('/auth/login'), 3000);
+        const storedRedirect = localStorage.getItem('irve_after_verify_redirect');
+        const pendingRedirect = safeRedirect || (
+          storedRedirect?.startsWith('/') && !storedRedirect.startsWith('//') ? storedRedirect : null
+        );
+
+        if (data.token) {
+          localStorage.setItem('irve_token', data.token);
+          authApi.me()
+            .then(({ data: user }) => {
+              localStorage.setItem('irve_user', JSON.stringify(user));
+              if (pendingRedirect) {
+                localStorage.removeItem('irve_after_verify_redirect');
+                router.push(pendingRedirect);
+                return;
+              }
+              router.push(user.role === 'INSTALLER' ? '/dashboard/installer' : '/dashboard');
+            })
+            .catch(() => {
+              router.push(
+                pendingRedirect
+                  ? `/auth/login?redirect=${encodeURIComponent(pendingRedirect)}`
+                  : '/auth/login'
+              );
+            });
+          return;
+        }
+
+        setTimeout(() => router.push(loginHref), 3000);
       })
       .catch(err => {
         const msg = err?.response?.data?.message || '';
         setMessage(msg || 'Lien invalide ou expiré.');
         setStatus(msg.includes('expiré') ? 'expired' : 'error');
       });
-  }, [token]);
+  }, [token, router, safeRedirect, loginHref]);
 
   const handleResend = async () => {
     if (!email.trim()) { toast.error('Entrez votre adresse email.'); return; }
@@ -84,7 +115,7 @@ function VerifyEmailPageContent() {
                   {message || 'Votre compte est activé. Redirection dans 3 secondes…'}
                 </p>
               </div>
-              <Link href="/auth/login" className="btn-primary w-full py-2.5 block">
+              <Link href={loginHref} className="btn-primary w-full py-2.5 block">
                 Se connecter maintenant
               </Link>
             </>
@@ -134,7 +165,7 @@ function VerifyEmailPageContent() {
           )}
 
           <p className="text-sm text-gray-400">
-            <Link href="/auth/login" className="hover:underline text-primary">
+            <Link href={loginHref} className="hover:underline text-primary">
               ← Retour à la connexion
             </Link>
           </p>

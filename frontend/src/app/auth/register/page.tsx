@@ -23,6 +23,11 @@ function RegisterPageContent() {
   const router = useRouter();
   const params = useSearchParams();
   const defaultRole = params.get('role') === 'INSTALLER' ? 'INSTALLER' : 'CLIENT';
+  const redirect = params.get('redirect') || null;
+  const safeRedirect = redirect?.startsWith('/') && !redirect.startsWith('//') ? redirect : null;
+  const loginHref = safeRedirect
+    ? `/auth/login?redirect=${encodeURIComponent(safeRedirect)}`
+    : '/auth/login';
 
   const [role, setRole]               = useState<Role>(defaultRole as Role);
   const [form, setForm]               = useState({
@@ -71,7 +76,14 @@ function RegisterPageContent() {
       await authApi.register(payload);
 
       toast.success('Compte créé ! Vérifiez votre email pour activer votre compte.');
-      router.push('/auth/verify-email');
+      if (safeRedirect) {
+        localStorage.setItem('irve_after_verify_redirect', safeRedirect);
+      }
+      router.push(
+        safeRedirect
+          ? `/auth/verify-email?redirect=${encodeURIComponent(safeRedirect)}`
+          : '/auth/verify-email'
+      );
 
     } catch (err: any) {
       toast.error(err.response?.data?.message || "Erreur lors de l'inscription.");
@@ -382,7 +394,7 @@ function RegisterPageContent() {
 
           <p className="text-center text-sm text-gray-500 mt-8">
             Déjà un compte ?{' '}
-            <Link href="/auth/login" className="text-primary font-semibold hover:underline">
+            <Link href={loginHref} className="text-primary font-semibold hover:underline">
               Se connecter
             </Link>
           </p>

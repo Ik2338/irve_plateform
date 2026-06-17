@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { ConversationContext, NotificationType } from '@prisma/client';
 import { PrismaService } from '../common/prisma/prisma.service';
+import { sortConversationsForInbox } from './messaging-sort';
 
 type EnsureConversationInput = {
   clientId: string;
@@ -144,7 +145,7 @@ export class MessagingService {
       ],
     });
 
-    return Promise.all(conversations.map(async (conversation) => ({
+    const withUnreadCounts = await Promise.all(conversations.map(async (conversation) => ({
       ...conversation,
       lastMessage: conversation.messages[0] ?? null,
       unreadCount: await this.prisma.message.count({
@@ -155,6 +156,8 @@ export class MessagingService {
         },
       }),
     })));
+
+    return sortConversationsForInbox(withUnreadCounts);
   }
 
   async findOne(conversationId: string, userId: string) {
@@ -181,9 +184,11 @@ export class MessagingService {
     });
   }
 
-  async sendMessage(userId: string, conversationId: string, body: string, attachments: any[] = []) {
+  async sendMessage(userId: string, conversationId: string, body = '', attachments: any[] = []) {
     const text = body.trim();
-    if (!text) throw new BadRequestException('Le message ne peut pas etre vide.');
+    if (!text && attachments.length === 0) {
+      throw new BadRequestException('Le message ne peut pas etre vide.');
+    }
 
     const conversation = await this.assertParticipant(conversationId, userId);
     const recipient = conversation.participants.find((p) => p.userId !== userId);
@@ -204,7 +209,7 @@ export class MessagingService {
       actorId: userId,
       type: NotificationType.NEW_MESSAGE,
       title: 'Nouveau message',
-      body: `${message.sender.firstName} ${message.sender.lastName}: ${text.slice(0, 120)}`,
+      body: `${message.sender.firstName} ${message.sender.lastName}: ${text ? text.slice(0, 120) : 'Piece jointe'}`,
       link: `/messages/${conversationId}`,
     });
 

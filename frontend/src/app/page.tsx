@@ -12,6 +12,7 @@ import {
   MapPin,
   ParkingSquare,
   Plug,
+  Search,
   Shield,
   Users,
   Wrench,
@@ -103,14 +104,15 @@ export default function HomePage() {
             <a href="#methode" className="hover:text-white">Methode</a>
             <a href="#dossier" className="hover:text-white">Dossier technique</a>
             <a href="#faq" className="hover:text-white">FAQ</a>
+            <Link href="/installers/search" className="hover:text-white">Installateurs</Link>
           </div>
           <div className="flex items-center gap-2">
             <Link href="/auth/login" className="hidden rounded-lg px-3 py-2 text-sm font-semibold text-white/80 hover:bg-white/10 sm:inline-flex">
               Connexion
             </Link>
-            <Link href="/requests/new" className="btn-primary text-sm">
-              Demarrer
-              <ArrowRight className="h-4 w-4" />
+            <Link href="/installers/search" className="btn-primary text-sm">
+              Rechercher
+              <Search className="h-4 w-4" />
             </Link>
           </div>
         </div>
@@ -138,6 +140,10 @@ export default function HomePage() {
               suivi chantier et mise en service par des professionnels certifies.
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+              <Link href="/installers/search" className="btn-primary px-6 py-3 text-base">
+                Trouver un installateur
+                <Search className="h-5 w-5" />
+              </Link>
               <Link href="/requests/new" className="btn-primary px-6 py-3 text-base">
                 Deposer une demande
                 <ArrowRight className="h-5 w-5" />
@@ -276,12 +282,18 @@ export default function HomePage() {
         <div className="mx-auto flex max-w-6xl flex-col gap-6 md:flex-row md:items-center md:justify-between">
           <div>
             <p className="text-sm font-bold uppercase tracking-[0.18em] text-accent">Pret pour le chantier ?</p>
-            <h2 className="mt-2 max-w-2xl text-3xl font-black">Deposez un projet clair et recevez des devis comparables.</h2>
+            <h2 className="mt-2 max-w-2xl text-3xl font-black">Choisissez un installateur ou deposez un projet clair.</h2>
           </div>
-          <Link href="/requests/new" className="btn-primary w-full px-6 py-3 md:w-auto">
-            Creer ma demande
-            <ArrowRight className="h-5 w-5" />
-          </Link>
+          <div className="flex w-full flex-col gap-3 sm:flex-row md:w-auto">
+            <Link href="/installers/search" className="btn-primary w-full px-6 py-3 md:w-auto">
+              Rechercher un installateur
+              <Search className="h-5 w-5" />
+            </Link>
+            <Link href="/requests/new" className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-white/30 bg-white/10 px-6 py-3 font-semibold text-white backdrop-blur transition hover:bg-white/20 md:w-auto">
+              Creer ma demande
+              <ArrowRight className="h-5 w-5" />
+            </Link>
+          </div>
         </div>
       </section>
 

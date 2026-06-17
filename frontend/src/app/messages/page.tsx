@@ -7,6 +7,7 @@ import { MessageCircle, Search, UserRound, Zap } from 'lucide-react';
 import ClientNav from '@/components/ClientNav';
 import InstallerNav from '@/components/InstallerNav';
 import { messagingApi } from '@/lib/api';
+import { sortConversationsForInbox } from '@/lib/messaging';
 
 function ConversationNav({ role }: { role?: string }) {
   if (role === 'INSTALLER') return <InstallerNav />;
@@ -60,8 +61,9 @@ export default function MessagesPage() {
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return conversations;
-    return conversations.filter((c) => {
+    const sorted = sortConversationsForInbox(conversations);
+    if (!q) return sorted;
+    return sorted.filter((c: any) => {
       const other =
         user?.role === 'INSTALLER'
           ? `${c.client?.firstName ?? ''} ${c.client?.lastName ?? ''}`

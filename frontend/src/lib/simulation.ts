@@ -5,13 +5,11 @@ import type { ProjectType, PowerLevel } from '@/types';
 // https://advenir.mobi/beneficier-dadvenir/
 
 export interface SimulationResult {
-  basePrice: number;          // Estimation prix HT installateur
+  basePrice: number;          // Estimation prix installateur
   advenirAid: number;         // Aide ADVENIR
   taxCredit: number;          // Crédit d'impôt (particuliers uniquement)
   totalAids: number;          // Total aides
   netPrice: number;           // Prix net après aides
-  vatAmount: number;          // TVA 5,5% ou 10%
-  netTTC: number;             // TTC après aides
   details: AidDetail[];
 }
 
@@ -22,9 +20,6 @@ export interface AidDetail {
   condition?: string;
 }
 
-// Taux TVA réduit applicable aux travaux de rénovation énergétique
-const VAT_RATE = 0.055; // 5,5%
-
 // Forfaits ADVENIR par type de projet (aide par point de charge)
 const ADVENIR_RATES: Record<string, { rate: number; cap: number; label: string }> = {
   RESIDENTIAL_COLLECTIVE: { rate: 0.50, cap: 960,  label: 'Résidentiel collectif (50% plafonné)' },
@@ -34,7 +29,7 @@ const ADVENIR_RATES: Record<string, { rate: number; cap: number; label: string }
   SYNDIC:                 { rate: 0.50, cap: 1750, label: 'Syndic / Copropriété (50%)' },
 };
 
-// Prix de base estimatifs HT selon type + puissance (hors aides)
+// Prix de base estimatifs selon type + puissance (hors aides)
 const BASE_PRICES: Record<ProjectType, Record<PowerLevel, number>> = {
   RESIDENTIAL: { P1: 800,  P2: 1200, P3: 2500, P4: 8000  },
   COMMERCIAL:  { P1: 1200, P2: 1800, P3: 3500, P4: 15000 },
@@ -87,8 +82,6 @@ export function simulate(
 
   const totalAids = advenirAid + taxCredit;
   const netPrice = Math.max(0, basePrice - totalAids);
-  const vatAmount = netPrice * VAT_RATE;
-  const netTTC = netPrice + vatAmount;
 
   return {
     basePrice,
@@ -96,8 +89,6 @@ export function simulate(
     taxCredit,
     totalAids,
     netPrice,
-    vatAmount,
-    netTTC,
     details,
   };
 }

@@ -47,7 +47,6 @@ interface Quote {
   validUntil?:  string;
   laborCost?:   number;
   // materialCost?: number;
-  vatRate?:     number;
   notes?:       string;
   installer?:   QuoteInstaller;
   request?:     QuoteRequest;
@@ -117,9 +116,7 @@ export default function InstallerQuoteDetailPage() {
 
   if (!quote) return null;
 
-  const totalHT  = (quote.laborCost ?? 0) ;
-  const tva      = totalHT * ((quote.vatRate ?? 2) / 100);
-  const totalTTC = totalHT + tva;
+  const quoteAmount = quote.laborCost ?? 0;
 
   const statusConfig: Record<string, { label: string; color: string; Icon: any }> = {
     SENT:     { label: 'En attente',  color: 'bg-orange-100 text-orange-700', Icon: Clock       },
@@ -261,9 +258,8 @@ export default function InstallerQuoteDetailPage() {
             {[
               { label: 'Installateur',   value: quote.installer?.companyName ?? '—' },
               { label: 'Type de projet', value: PROJ_LABELS[quote.request?.projectType ?? ''] ?? quote.request?.projectType ?? '—' },
-              { label: "Main d'œuvre",   value: `${(quote.laborCost ?? 0).toLocaleString('fr-FR', { minimumFractionDigits: 2 })} €` },
+              { label: "Montant du devis",   value: `${quoteAmount.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} €` },
               // { label: 'Matériel',       value: `${(quote.materialCost ?? 0).toLocaleString('fr-FR', { minimumFractionDigits: 2 })} €` },
-              { label: `TVA (${quote.vatRate ?? 20}%)`, value: `${tva.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} €` },
             ].map(row => (
               <div key={row.label} className="py-3 flex justify-between gap-4">
                 <dt className="text-sm text-gray-500">{row.label}</dt>
@@ -271,9 +267,9 @@ export default function InstallerQuoteDetailPage() {
               </div>
             ))}
             <div className="py-3 flex justify-between gap-4">
-              <dt className="text-base font-bold text-gray-900">Total TTC</dt>
+              <dt className="text-base font-bold text-gray-900">Montant du devis</dt>
               <dd className="text-base font-bold text-primary">
-                {totalTTC.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} €
+                {quoteAmount.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} €
               </dd>
             </div>
           </dl>

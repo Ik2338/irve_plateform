@@ -11,6 +11,10 @@ function LoginPageContent() {
   const router       = useRouter();
   const searchParams = useSearchParams();
   const redirect     = searchParams.get('redirect') || null;
+  const safeRedirect = redirect?.startsWith('/') && !redirect.startsWith('//') ? redirect : null;
+  const registerHref = safeRedirect
+    ? `/auth/register?redirect=${encodeURIComponent(safeRedirect)}`
+    : '/auth/register';
 
   const [form,         setForm]         = useState({ email: '', password: '' });
   const [loading,      setLoading]      = useState(false);
@@ -26,11 +30,12 @@ function LoginPageContent() {
       const raw = localStorage.getItem('irve_user');
       if (!raw) return;
       const user = JSON.parse(raw);
+      if (safeRedirect && user.role === 'CLIENT') { router.replace(safeRedirect);          return; }
       if (user.role === 'ADMIN')     { router.replace('/admin');               return; }
       if (user.role === 'INSTALLER') { router.replace('/dashboard/installer'); return; }
       router.replace('/dashboard');
     } catch { /* ignore */ }
-  }, []);
+  }, [router, safeRedirect]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -51,7 +56,7 @@ function LoginPageContent() {
       }
       toast.success(`Bienvenue, ${data.user.firstName} !`);
 
-      if (redirect)                        { router.push(redirect);               return; }
+      if (safeRedirect && data.user.role === 'CLIENT') { router.push(safeRedirect);          return; }
       if (data.user.role === 'ADMIN')     { router.push('/admin');               return; }
       if (data.user.role === 'INSTALLER') { router.push('/dashboard/installer'); return; }
       router.push('/dashboard');
@@ -313,7 +318,7 @@ function LoginPageContent() {
 
           <p className="text-center text-sm text-gray-500 mt-8">
             Pas encore de compte ?{' '}
-            <Link href="/auth/register" className="text-primary font-semibold hover:underline">
+            <Link href={registerHref} className="text-primary font-semibold hover:underline">
               Créer un compte
             </Link>
           </p>

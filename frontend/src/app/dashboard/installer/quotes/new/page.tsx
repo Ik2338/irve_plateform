@@ -37,8 +37,6 @@ const POWER_LABELS: Record<string, string> = {
   P5: '> 22 kW',
 };
 
-const VAT_RATE = 20;
-
 function NewQuotePageContent() {
   const searchParams = useSearchParams();
   const router       = useRouter();
@@ -68,8 +66,6 @@ function NewQuotePageContent() {
   }, [requestId]);
 
   const laborCost = parseFloat(form.laborCost) || 0;
-  const tva       = laborCost * (VAT_RATE / 100);
-  const totalTTC  = laborCost + tva;
 
   const handleSubmit = async () => {
     if (!requestId || !UUID_RE.test(requestId)) return;
@@ -240,7 +236,7 @@ function NewQuotePageContent() {
           {/* Labor cost */}
           <div>
             <label className="label">
-              Main d'œuvre HT (€) <span className="text-red-500">*</span>
+              Montant du devis (€) <span className="text-red-500">*</span>
             </label>
             <input
               className="input"
@@ -256,19 +252,10 @@ function NewQuotePageContent() {
           {/* Live price breakdown */}
           {form.laborCost && (
             <dl className="bg-gray-50 rounded-xl px-4 divide-y divide-gray-200">
-              {[
-                { label: "Main d'œuvre HT",  value: `${laborCost.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} €` },
-                { label: `TVA (${VAT_RATE}%)`, value: `${tva.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} €` },
-              ].map(row => (
-                <div key={row.label} className="py-2.5 flex justify-between">
-                  <dt className="text-sm text-gray-500">{row.label}</dt>
-                  <dd className="text-sm font-semibold text-gray-700">{row.value}</dd>
-                </div>
-              ))}
               <div className="py-3 flex justify-between">
-                <dt className="text-base font-bold text-gray-900">Total TTC</dt>
+                <dt className="text-base font-bold text-gray-900">Montant du devis</dt>
                 <dd className="text-base font-bold text-primary">
-                  {totalTTC.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} €
+                  {laborCost.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} €
                 </dd>
               </div>
             </dl>

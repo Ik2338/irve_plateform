@@ -40,7 +40,6 @@ const PARKING_TYPE_LABELS: Record<string, string> = {
 const PARKING_ACCESS_LABELS: Record<string, string> = {
   PRIVATE: 'Accès privé', PUBLIC: 'Accès public', MIXED: 'Accès mixte',
 };
-const VAT_RATE = 20;
 
 // ─── Modal : Démarrer ou Terminer une installation ────────────────────────────
 function MarkDoneModal({
@@ -119,8 +118,6 @@ function ZoneLeadModal({
   const [submitting, setSubmitting] = useState(false);
 
   const laborCost = parseFloat(form.laborCost) || 0;
-  const tva       = laborCost * (VAT_RATE / 100);
-  const totalTTC  = laborCost + tva;
 
   const ProjIcon = PROJ_ICONS[lead?.projectType] ?? Building2;
 
@@ -347,7 +344,7 @@ function ZoneLeadModal({
                 {/* Labor cost */}
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-1.5">
-                    Main d&apos;œuvre HT (€) <span className="text-red-500">*</span>
+                    Montant du devis (€) <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="number"
@@ -364,8 +361,7 @@ function ZoneLeadModal({
                 {form.laborCost && (
                   <dl className="bg-gray-50 rounded-xl px-4 divide-y divide-gray-200">
                     {[
-                      { label: "Main d'œuvre HT", value: `${laborCost.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} €` },
-                      { label: `TVA (${VAT_RATE}%)`, value: `${tva.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} €` },
+                      { label: "Montant du devis", value: `${laborCost.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} €` },
                     ].map(row => (
                       <div key={row.label} className="py-2.5 flex justify-between">
                         <dt className="text-sm text-gray-500">{row.label}</dt>
@@ -373,9 +369,9 @@ function ZoneLeadModal({
                       </div>
                     ))}
                     <div className="py-3 flex justify-between">
-                      <dt className="text-base font-bold text-gray-900">Total TTC</dt>
+                      <dt className="text-base font-bold text-gray-900">Montant du devis</dt>
                       <dd className="text-base font-bold text-primary">
-                        {totalTTC.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} €
+                        {laborCost.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} €
                       </dd>
                     </div>
                   </dl>
@@ -606,7 +602,7 @@ export default function InstallerDashboard() {
                           ))}
                         </div>
                         <div className="text-primary font-bold mt-2">
-                          {total.toLocaleString('fr-FR')} € HT
+                          {total.toLocaleString('fr-FR')} €
                         </div>
                       </div>
                       <div className="flex-shrink-0">
@@ -769,7 +765,7 @@ export default function InstallerDashboard() {
                     <div>
                       <div className="font-medium">{q.request?.projectType} – {q.request?.powerLevel}</div>
                       <div className="text-sm text-gray-500">{q.request?.city}</div>
-                      <div className="text-primary font-bold">{total.toLocaleString('fr-FR')} € HT</div>
+                      <div className="text-primary font-bold">{total.toLocaleString('fr-FR')} €</div>
                     </div>
                     <span className={
                       q.status === 'ACCEPTED' ? 'badge-green' :

@@ -161,7 +161,6 @@ model Quote {
   installerId  String              @db.Uuid
   userId       String              @db.Uuid
   amount       Float
-  vatRate      Float               @default(20)
   laborCost    Float
   notes        String?
   validUntil   DateTime

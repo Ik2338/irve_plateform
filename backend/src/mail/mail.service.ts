@@ -283,7 +283,7 @@ export class MailService {
     const clientName = [client?.firstName, client?.lastName].filter(Boolean).join(' ') || 'Client';
     const instName   = installer?.companyName || 'Un installateur';
     const projLabel  = PROJ_LABELS[request?.projectType] || request?.projectType || '';
-    const totalTTC   = (quote.amount * (1 + (quote.vatRate ?? 20) / 100)).toFixed(2);
+    const quoteAmount = Number(quote.amount ?? quote.laborCost ?? 0).toFixed(2);
 
     const html = `
       <div style="font-family:system-ui,sans-serif;max-width:600px;margin:0 auto;background:#ffffff;">
@@ -313,16 +313,12 @@ export class MailService {
                 <td style="color:#111827;font-weight:600;padding:6px 4px;">${projLabel}</td>
               </tr>` : ''}
               <tr>
-                <td style="color:#6b7280;padding:6px 0;">Main d'œuvre HT</td>
+                <td style="color:#6b7280;padding:6px 0;">Main d'œuvre</td>
                 <td style="color:#111827;font-weight:600;padding:6px 0;">${quote.laborCost?.toFixed(2)} €</td>
               </tr>
-              <tr style="background:#f9fafb;">
-                <td style="color:#6b7280;padding:6px 4px;">TVA (${quote.vatRate ?? 20}%)</td>
-                <td style="color:#111827;font-weight:600;padding:6px 4px;">${((quote.amount * (quote.vatRate ?? 20)) / 100).toFixed(2)} €</td>
-              </tr>
               <tr style="border-top:2px solid #e5e7eb;">
-                <td style="color:#111827;padding:10px 0 6px;font-weight:700;font-size:15px;">Total TTC</td>
-                <td style="color:#16a34a;font-weight:700;font-size:17px;padding:10px 0 6px;">${totalTTC} €</td>
+                <td style="color:#111827;padding:10px 0 6px;font-weight:700;font-size:15px;">Montant du devis</td>
+                <td style="color:#16a34a;font-weight:700;font-size:17px;padding:10px 0 6px;">${quoteAmount} €</td>
               </tr>
             </table>
             ${quote.notes ? `
@@ -359,7 +355,7 @@ export class MailService {
 
     await this.send(
       client.email,
-      `📋 Nouveau devis reçu de ${instName} — ${totalTTC} € TTC`,
+      `📋 Nouveau devis reçu de ${instName} — ${quoteAmount} €`,
       html,
     );
   }

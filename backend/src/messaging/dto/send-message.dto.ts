@@ -1,4 +1,4 @@
-import { IsArray, IsOptional, IsString, MinLength, ValidateNested } from 'class-validator';
+import { IsArray, IsOptional, IsString, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 
 class MessageAttachmentDto {
@@ -13,9 +13,9 @@ class MessageAttachmentDto {
 }
 
 export class SendMessageDto {
+  @IsOptional()
   @IsString()
-  @MinLength(1)
-  body: string;
+  body?: string;
 
   @IsOptional() @IsArray() @ValidateNested({ each: true }) @Type(() => MessageAttachmentDto)
   attachments?: MessageAttachmentDto[];
