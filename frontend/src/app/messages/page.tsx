@@ -7,7 +7,7 @@ import { MessageCircle, Search, UserRound, Zap } from 'lucide-react';
 import ClientNav from '@/components/ClientNav';
 import InstallerNav from '@/components/InstallerNav';
 import { messagingApi } from '@/lib/api';
-import { sortConversationsForInbox } from '@/lib/messaging';
+import { sortConversationsForInbox } from '@/lib/messaging.mjs';
 
 function ConversationNav({ role }: { role?: string }) {
   if (role === 'INSTALLER') return <InstallerNav />;

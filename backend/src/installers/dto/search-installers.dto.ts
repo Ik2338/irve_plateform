@@ -25,4 +25,10 @@ export class SearchInstallersDto {
   @Type(() => Number)
   @IsInt()
   limit?: number;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  radius?: number;
 }

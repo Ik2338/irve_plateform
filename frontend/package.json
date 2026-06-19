@@ -6,7 +6,9 @@
     "dev": "next dev -H 0.0.0.0 -p 3000",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "tsc --noEmit",
+    "test": "node --test --experimental-test-isolation=none \"tests/**/*.test.mjs\"",
+    "test:integration": "powershell -ExecutionPolicy Bypass -File tests/run-next-integration.ps1"
   },
   "dependencies": {
     "next": "14.2.0",

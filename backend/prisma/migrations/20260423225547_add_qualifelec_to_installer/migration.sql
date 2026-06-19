@@ -130,7 +130,6 @@ CREATE TABLE "quotes" (
     "installerId" UUID NOT NULL,
     "userId" UUID NOT NULL,
     "amount" DOUBLE PRECISION NOT NULL,
-    "vatRate" DOUBLE PRECISION NOT NULL DEFAULT 20,
     "laborCost" DOUBLE PRECISION NOT NULL,
     "materialCost" DOUBLE PRECISION NOT NULL,
     "notes" TEXT,

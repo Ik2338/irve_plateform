@@ -350,7 +350,7 @@ export default function SearchPage() {
       const params: any = {};
       if (address.trim()) params.address = address.trim();
       if (projectType)    params.projectType  = projectType;
-      if (certification)  params.certification = certification;
+      if (certification)  params.certificationLevel = certification;
       if (radius)         params.radius        = radius;
 
       const { data } = await api.get('/installers/search', { params });

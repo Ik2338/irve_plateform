@@ -91,7 +91,7 @@ export const installersApi = {
   search: (params: {
     address:        string;
     projectType?:   string;
-    certification?: string;
+    certificationLevel?: string;
     radius?:        string;
   }) => api.get('/installers/search', { params }),
   get:           (id: string) => safeUuid(id, 'installersApi.get') ?? api.get(`/installers/${id}`),

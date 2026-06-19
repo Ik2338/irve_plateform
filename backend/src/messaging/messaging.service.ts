@@ -145,17 +145,26 @@ export class MessagingService {
       ],
     });
 
-    const withUnreadCounts = await Promise.all(conversations.map(async (conversation) => ({
-      ...conversation,
-      lastMessage: conversation.messages[0] ?? null,
-      unreadCount: await this.prisma.message.count({
+    const unreadRows = conversations.length
+      ? await this.prisma.message.groupBy({
+        by: ['conversationId'],
         where: {
-          conversationId: conversation.id,
+          conversationId: { in: conversations.map((conversation) => conversation.id) },
           senderId: { not: userId },
           readAt: null,
         },
-      }),
-    })));
+        _count: { _all: true },
+      })
+      : [];
+    const unreadByConversation = new Map(
+      unreadRows.map((row) => [row.conversationId, row._count._all]),
+    );
+
+    const withUnreadCounts = conversations.map((conversation) => ({
+      ...conversation,
+      lastMessage: conversation.messages[0] ?? null,
+      unreadCount: unreadByConversation.get(conversation.id) ?? 0,
+    }));
 
     return sortConversationsForInbox(withUnreadCounts);
   }

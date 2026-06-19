@@ -1,4 +1,10 @@
 {
+  "scripts": {
+    "lint": "npm run lint --prefix backend && npm run lint --prefix frontend",
+    "build": "npm run build --prefix backend && npm run build --prefix frontend",
+    "test": "npm run test --prefix backend && npm run test --prefix frontend",
+    "test:integration": "npm run test --prefix backend && npm run test:integration --prefix frontend"
+  },
   "devDependencies": {
     "@types/node": "^25.6.0",
     "@types/nodemailer": "^8.0.0",

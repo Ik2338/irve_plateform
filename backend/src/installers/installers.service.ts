@@ -211,12 +211,14 @@ export class InstallersService {
     }
 
     // Même logique de filtres dynamiques pour le CAS 2
+    const radiusLimit = dto.radius && dto.radius > 0 ? Math.min(dto.radius, 500) : null;
+    const distanceLimit = radiusLimit ? `LEAST(i."interventionRadius", ${radiusLimit}) * 1000` : `i."interventionRadius" * 1000`;
     const conditions: string[] = [
       `i."isActive" = true`,
       `ST_DWithin(
         i.location,
         ST_SetSRID(ST_MakePoint(${coords.lon}, ${coords.lat}), 4326)::geography,
-        i."interventionRadius" * 1000
+        ${distanceLimit}
       )`,
     ];
 

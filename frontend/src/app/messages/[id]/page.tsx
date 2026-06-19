@@ -7,7 +7,7 @@ import { ArrowLeft, CalendarClock, CheckCheck, FileText, Paperclip, SendHorizona
 import ClientNav from '@/components/ClientNav';
 import InstallerNav from '@/components/InstallerNav';
 import { messagingApi } from '@/lib/api';
-import { getAttachmentHref, isImageAttachment } from '@/lib/messaging';
+import { getAttachmentHref, isImageAttachment } from '@/lib/messaging.mjs';
 import toast from 'react-hot-toast';
 
 function ConversationNav({ role }: { role?: string }) {
